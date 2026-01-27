@@ -1,0 +1,598 @@
+# ArkTS Compliance Report
+
+## Summary
+Total files checked: 0
+Files with issues: 10
+Total issues: 569
+
+## Issues Found
+
+### d:\DevEcoStudioProjects\Vignette\entry\src\main\ets\database\DBManager.ets
+- Line 275: NO_UI_IN_MODEL - if (resultSet.goToFirstRow()) {
+- Line 296: NO_UI_IN_MODEL - if (resultSet. goToFirstRow()) {
+- Line 318: NO_UI_IN_MODEL - while (resultSet.goToNextRow()) {
+- Line 338: NO_UI_IN_MODEL - while (resultSet.goToNextRow()) {
+- Line 366: NO_UI_IN_MODEL - while (resultSet.goToNextRow()) {
+- Line 390: NO_UI_IN_MODEL - while (resultSet.goToNextRow()) {
+- Line 440: NO_UI_IN_MODEL - while (resultSet.goToNextRow()) {
+- Line 469: NO_UI_IN_MODEL - while (resultSet. goToNextRow()) {
+- Line 495: NO_UI_IN_MODEL - while (resultSet.goToNextRow()) {
+- Line 563: NO_UI_IN_MODEL - if (resultSet.goToFirstRow()) {
+- Line 649: NO_UI_IN_MODEL - if (resultSet.goToFirstRow()) {
+- Line 666: NO_UI_IN_MODEL - while (logResultSet.goToNextRow()) {
+
+### d:\DevEcoStudioProjects\Vignette\entry\src\main\ets\manager\DictionaryManager.ets
+- Line 273: NO_DESTRUCTURING - this. memoryCacheValues[existingIndex] = definition;
+
+### d:\DevEcoStudioProjects\Vignette\entry\src\main\ets\manager\SessionPlanner.ets
+- Line 119: NO_UI_IN_MODEL - getStatusText(): string {
+
+### d:\DevEcoStudioProjects\Vignette\entry\src\main\ets\model\WordModel.ets
+- Line 256: NO_PARAM_DESTRUCTURING - meanings.push({ pos: m.pos, cn: m. cn });
+
+### d:\DevEcoStudioProjects\Vignette\entry\src\main\ets\pages\Index.ets
+- Line 276: NO_UI_IN_MODEL - private getStatusText(status: WordStatus): string {
+- Line 324: NO_UI_IN_MODEL - Column() {
+- Line 328: NO_UI_IN_MODEL - Column() {
+- Line 334: NO_UI_IN_MODEL - Text('加载中...')
+- Line 344: NO_UI_IN_MODEL - Column() {
+- Line 364: NO_UI_IN_MODEL - Row() {
+- Line 365: NO_UI_IN_MODEL - Column() {
+- Line 366: NO_UI_IN_MODEL - Text('词影')
+- Line 371: NO_UI_IN_MODEL - Text('单词大师')
+- Line 379: NO_UI_IN_MODEL - Row() {
+- Line 385: NO_UI_IN_MODEL - Text(this.isApiConfigured ? 'API就绪' : 'API未设置')
+- Line 395: NO_UI_IN_MODEL - Text('⚙')
+- Line 409: NO_UI_IN_MODEL - Column() {
+- Line 410: NO_UI_IN_MODEL - Text("今日进度")
+- Line 417: NO_UI_IN_MODEL - Row() {
+- Line 425: NO_UI_IN_MODEL - Row() {
+- Line 438: NO_UI_IN_MODEL - Column() {
+- Line 439: NO_UI_IN_MODEL - Text(title)
+- Line 443: NO_UI_IN_MODEL - Text(value)
+- Line 449: NO_UI_IN_MODEL - Text(subtitle)
+- Line 464: NO_UI_IN_MODEL - Row() {
+- Line 465: NO_UI_IN_MODEL - Text('▶')
+- Line 469: NO_UI_IN_MODEL - Text('开始学习会话')
+- Line 486: NO_UI_IN_MODEL - Row() {
+- Line 511: NO_UI_IN_MODEL - Column() {
+- Line 512: NO_UI_IN_MODEL - Row() {
+- Line 513: NO_UI_IN_MODEL - Text('单词本')
+- Line 520: NO_UI_IN_MODEL - Text(`${this.filteredWords.length} 个单词`)
+- Line 527: NO_UI_IN_MODEL - Row() {
+- Line 528: NO_UI_IN_MODEL - Text('🔍')
+- Line 547: NO_UI_IN_MODEL - Row() {
+- Line 548: NO_UI_IN_MODEL - ForEach(this. getFilterOptions(), (filter: WordFilter) => {
+- Line 549: NO_UI_IN_MODEL - Text(filter)
+- Line 566: NO_UI_IN_MODEL - Column() {
+- Line 567: NO_UI_IN_MODEL - Text('📁')
+- Line 571: NO_UI_IN_MODEL - Text('未找到单词')
+- Line 576: NO_UI_IN_MODEL - Text('请导入一些单词开始学习!')
+- Line 586: NO_UI_IN_MODEL - Column() {
+- Line 587: NO_UI_IN_MODEL - ForEach(this. filteredWords, (word: WordItem) => {
+- Line 600: NO_UI_IN_MODEL - Row() {
+- Line 601: NO_UI_IN_MODEL - Column() {
+- Line 602: NO_UI_IN_MODEL - Text(word.word)
+- Line 607: NO_UI_IN_MODEL - Row() {
+- Line 608: NO_UI_IN_MODEL - Text(this.getStatusText(word.status))
+- Line 608: NO_UI_IN_MODEL - Text(this.getStatusText(word.status))
+- Line 616: NO_UI_IN_MODEL - Text(`${word.history. getReviewCount()} reviews`)
+- Line 623: NO_UI_IN_MODEL - Text(this.formatDueDate(word. dueDate))
+- Line 634: NO_UI_IN_MODEL - Column() {
+- Line 635: NO_UI_IN_MODEL - Text(`S:  ${word.fsrsState. stability. toFixed(1)}`)
+- Line 92: NO_PARAM_DESTRUCTURING - promptAction.showToast({ message: 'Failed to initialize app', duration: 2000 });
+- Line 199: NO_PARAM_DESTRUCTURING - promptAction.showToast({ message: '没有可学习的单词! ', duration: 2000 });
+- Line 211: NO_PARAM_DESTRUCTURING - promptAction.showToast({ message: '无法开始学习会话', duration: 2000 });
+- Line 234: NO_PARAM_DESTRUCTURING - promptAction.showToast({ message:  '导入单词失败', duration: 2000 });
+- Line 253: NO_PARAM_DESTRUCTURING - promptAction.showToast({ message: '已清空所有单词', duration: 1500 });
+- Line 263: NO_PARAM_DESTRUCTURING - router.pushUrl({ url: 'pages/SettingsPage' });
+- Line 337: NO_PARAM_DESTRUCTURING - .margin({ top: 16 })
+- Line 351: NO_PARAM_DESTRUCTURING - .padding({ left: 16, right: 16, bottom: 32 })
+- Line 388: NO_PARAM_DESTRUCTURING - .margin({ left: 6 })
+- Line 390: NO_PARAM_DESTRUCTURING - .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+- Line 398: NO_PARAM_DESTRUCTURING - .margin({ left: 16 })
+- Line 403: NO_PARAM_DESTRUCTURING - .padding({ left: 16, right: 16 })
+- Line 415: NO_PARAM_DESTRUCTURING - .margin({ top: 24, bottom: 12 })
+- Line 431: NO_PARAM_DESTRUCTURING - .margin({ top: 12 })
+- Line 447: NO_PARAM_DESTRUCTURING - .margin({ top: 8 })
+- Line 452: NO_PARAM_DESTRUCTURING - .margin({ top: 4 })
+- Line 473: NO_PARAM_DESTRUCTURING - .margin({ left: 12 })
+- Line 480: NO_PARAM_DESTRUCTURING - .margin({ top: 24 })
+- Line 501: NO_PARAM_DESTRUCTURING - .margin({ left: 12 })
+- Line 505: NO_PARAM_DESTRUCTURING - .margin({ top: 16 })
+- Line 525: NO_PARAM_DESTRUCTURING - .margin({ top: 24, bottom: 12 })
+- Line 532: NO_PARAM_DESTRUCTURING - TextInput({ text: this.searchText, placeholder: '搜索单词...' })
+- Line 537: NO_PARAM_DESTRUCTURING - .margin({ left: 8 })
+- Line 542: NO_PARAM_DESTRUCTURING - .padding({ left: 12, right: 12 })
+- Line 553: NO_PARAM_DESTRUCTURING - .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+- Line 555: NO_PARAM_DESTRUCTURING - .margin({ right: 8 })
+- Line 563: NO_PARAM_DESTRUCTURING - .margin({ top: 12 })
+- Line 574: NO_PARAM_DESTRUCTURING - .margin({ top: 16 })
+- Line 579: NO_PARAM_DESTRUCTURING - .margin({ top: 8 })
+- Line 584: NO_PARAM_DESTRUCTURING - .margin({ top: 24 })
+- Line 592: NO_PARAM_DESTRUCTURING - .margin({ top: 12 })
+- Line 612: NO_PARAM_DESTRUCTURING - .padding({ left: 8, right: 8, top: 2, bottom: 2 })
+- Line 619: NO_PARAM_DESTRUCTURING - .margin({ left: 8 })
+- Line 626: NO_PARAM_DESTRUCTURING - .margin({ left: 8 })
+- Line 629: NO_PARAM_DESTRUCTURING - .margin({ top: 6 })
+- Line 648: NO_PARAM_DESTRUCTURING - .margin({ top: 4 })
+- Line 656: NO_PARAM_DESTRUCTURING - .margin({ bottom: 8 })
+
+### d:\DevEcoStudioProjects\Vignette\entry\src\main\ets\pages\ReadPage.ets
+- Line 481: NO_DESTRUCTURING - array[i] = array[j];
+- Line 482: NO_DESTRUCTURING - array[j] = temp;
+- Line 868: NO_UI_IN_MODEL - Stack() {
+- Line 869: NO_UI_IN_MODEL - Column() {
+- Line 875: NO_UI_IN_MODEL - Column() {
+- Line 914: NO_UI_IN_MODEL - Row() {
+- Line 923: NO_UI_IN_MODEL - Column() {
+- Line 924: NO_UI_IN_MODEL - Text(`${this.taskIndex + 1} / ${this.taskQueue.length}`)
+- Line 945: NO_UI_IN_MODEL - Text('⚙️')
+- Line 952: NO_UI_IN_MODEL - Text('跳过')
+- Line 965: NO_UI_IN_MODEL - Column() {
+- Line 968: NO_UI_IN_MODEL - Text(this.getStatusText(this.currentWord.status))
+- Line 968: NO_UI_IN_MODEL - Text(this.getStatusText(this.currentWord.status))
+- Line 976: NO_UI_IN_MODEL - Row() {
+- Line 977: NO_UI_IN_MODEL - Text(this.currentWord.word)
+- Line 998: NO_UI_IN_MODEL - Row() {
+- Line 999: NO_UI_IN_MODEL - Text('关联词汇:  ')
+- Line 1003: NO_UI_IN_MODEL - ForEach(this. supportWords, (word: string, index: number) => {
+- Line 1004: NO_UI_IN_MODEL - Text(word)
+- Line 1024: NO_UI_IN_MODEL - Column() {
+- Line 1025: NO_UI_IN_MODEL - Text('情境故事')
+- Line 1034: NO_UI_IN_MODEL - Column() {
+- Line 1040: NO_UI_IN_MODEL - Text('Generating story...')
+- Line 1053: NO_UI_IN_MODEL - Column() {
+- Line 1059: NO_UI_IN_MODEL - Text(this.storyError)
+- Line 1073: NO_UI_IN_MODEL - ForEach(this. storyWords, (storyWord: StoryWord, index: number) => {
+- Line 1074: NO_UI_IN_MODEL - Text(storyWord. word + (this.needsSpaceAfter(index) ? ' ' : ''))
+- Line 1092: NO_UI_IN_MODEL - Column() {
+- Line 1098: NO_UI_IN_MODEL - Text('点击"生成故事"创建情境')
+- Line 1131: NO_UI_IN_MODEL - Row() {
+- Line 1162: NO_UI_IN_MODEL - Column() {
+- Line 1164: NO_UI_IN_MODEL - Column()
+- Line 1176: NO_UI_IN_MODEL - Column() {
+- Line 1178: NO_UI_IN_MODEL - Column() {
+- Line 1180: NO_UI_IN_MODEL - Row() {
+- Line 1181: NO_UI_IN_MODEL - Column() {
+- Line 1182: NO_UI_IN_MODEL - Row() {
+- Line 1183: NO_UI_IN_MODEL - Text(this.dialogState.word)
+- Line 1199: NO_UI_IN_MODEL - Text(this.dialogState. definition.phonetic)
+- Line 1223: NO_UI_IN_MODEL - Column() {
+- Line 1228: NO_UI_IN_MODEL - Text('Loading definition...')
+- Line 1239: NO_UI_IN_MODEL - Column() {
+- Line 1242: NO_UI_IN_MODEL - Column() {
+- Line 1243: NO_UI_IN_MODEL - Row() {
+- Line 1244: NO_UI_IN_MODEL - Text(this.dialogState.definition.pos)
+- Line 1252: NO_UI_IN_MODEL - Text('In this context:')
+- Line 1258: NO_UI_IN_MODEL - Text(this.dialogState.definition.contextMeaning)
+- Line 1273: NO_UI_IN_MODEL - Column() {
+- Line 1274: NO_UI_IN_MODEL - Text('其他释义')
+- Line 1279: NO_UI_IN_MODEL - ForEach(this.dialogState.definition.commonMeanings, (meaning: GeneratedTypeLiteralInterface_1) => {
+- Line 1280: NO_UI_IN_MODEL - Row() {
+- Line 1281: NO_UI_IN_MODEL - Text(meaning.pos)
+- Line 1287: NO_UI_IN_MODEL - Text(meaning.cn)
+- Line 1324: NO_UI_IN_MODEL - Column() {
+- Line 1338: NO_UI_IN_MODEL - Row() {
+- Line 1363: NO_UI_IN_MODEL - Row() {
+- Line 1414: NO_UI_IN_MODEL - private getStatusText(status: WordStatus): string {
+- Line 1438: NO_UI_IN_MODEL - Column() {
+- Line 1440: NO_UI_IN_MODEL - Column()
+- Line 1454: NO_UI_IN_MODEL - Column() {
+- Line 1456: NO_UI_IN_MODEL - Column() {
+- Line 1458: NO_UI_IN_MODEL - Row() {
+- Line 1459: NO_UI_IN_MODEL - Text('语境设置')
+- Line 1478: NO_UI_IN_MODEL - Column() {
+- Line 1479: NO_UI_IN_MODEL - Text('语境风格')
+- Line 1484: NO_UI_IN_MODEL - Row() {
+- Line 1485: NO_UI_IN_MODEL - ForEach([
+- Line 1492: NO_UI_IN_MODEL - Text(this.getContextStyleName(style))
+- Line 1512: NO_UI_IN_MODEL - Column() {
+- Line 1513: NO_UI_IN_MODEL - Text('难度级别')
+- Line 1518: NO_UI_IN_MODEL - Row() {
+- Line 1519: NO_UI_IN_MODEL - ForEach([
+- Line 1526: NO_UI_IN_MODEL - Text(this.getDifficultyName(level))
+- Line 180: NO_PARAM_DESTRUCTURING - promptAction.showToast({ message: 'No words in queue', duration: 2000 });
+- Line 654: NO_PARAM_DESTRUCTURING - promptAction.showToast({ message: 'Word already in notebook', duration: 1500 });
+- Line 679: NO_PARAM_DESTRUCTURING - promptAction.showToast({ message: 'Added to notebook! ', duration: 1500 });
+- Line 683: NO_PARAM_DESTRUCTURING - promptAction.showToast({ message: 'Failed to add word', duration: 1500 });
+- Line 750: NO_PARAM_DESTRUCTURING - promptAction.showToast({ message: message, duration: 1000 });
+- Line 754: NO_PARAM_DESTRUCTURING - promptAction.showToast({ message: 'Failed to save review', duration: 1500 });
+- Line 789: NO_PARAM_DESTRUCTURING - promptAction. showToast({ message: 'Cannot undo - no snapshot available', duration: 1500 });
+- Line 813: NO_PARAM_DESTRUCTURING - promptAction.showToast({ message: 'Review undone', duration: 1000 });
+- Line 817: NO_PARAM_DESTRUCTURING - promptAction.showToast({ message: 'Failed to undo review', duration: 1500 });
+- Line 938: NO_PARAM_DESTRUCTURING - .margin({ top: 4 })
+- Line 940: NO_PARAM_DESTRUCTURING - .margin({ left: 16 })
+- Line 959: NO_PARAM_DESTRUCTURING - .padding({ left: 16, right: 16 })
+- Line 972: NO_PARAM_DESTRUCTURING - .padding({ left: 12, right: 12, top: 4, bottom: 4 })
+- Line 987: NO_PARAM_DESTRUCTURING - .margin({ left: 12 })
+- Line 994: NO_PARAM_DESTRUCTURING - .margin({ top: 16 })
+- Line 1008: NO_PARAM_DESTRUCTURING - .margin({ left: index > 0 ? 8 : 4 })
+- Line 1011: NO_PARAM_DESTRUCTURING - .margin({ top: 12 })
+- Line 1030: NO_PARAM_DESTRUCTURING - .margin({ bottom: 12 })
+- Line 1043: NO_PARAM_DESTRUCTURING - .margin({ top: 12 })
+- Line 1062: NO_PARAM_DESTRUCTURING - .margin({ top: 12 })
+- Line 1072: NO_PARAM_DESTRUCTURING - Flex({ wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
+- Line 1101: NO_PARAM_DESTRUCTURING - .margin({ top: 12 })
+- Line 1111: NO_PARAM_DESTRUCTURING - .margin({ top: 24 })
+- Line 1124: NO_PARAM_DESTRUCTURING - .margin({ top: 24 })
+- Line 1156: NO_PARAM_DESTRUCTURING - .margin({ top: 24 })
+- Line 1173: NO_PARAM_DESTRUCTURING - .position({ x: 0, y: 0 })
+- Line 1193: NO_PARAM_DESTRUCTURING - .margin({ left: 8 })
+- Line 1202: NO_PARAM_DESTRUCTURING - .margin({ top: 4 })
+- Line 1217: NO_PARAM_DESTRUCTURING - .padding({ left: 20, right: 20, top: 20, bottom: 12 })
+- Line 1231: NO_PARAM_DESTRUCTURING - .margin({ top: 8 })
+- Line 1248: NO_PARAM_DESTRUCTURING - .padding({ left: 8, right: 8, top: 2, bottom: 2 })
+- Line 1255: NO_PARAM_DESTRUCTURING - .margin({ left: 8 })
+- Line 1262: NO_PARAM_DESTRUCTURING - . margin({ top: 8 })
+- Line 1277: NO_PARAM_DESTRUCTURING - .margin({ bottom: 8 })
+- Line 1293: NO_PARAM_DESTRUCTURING - . margin({ bottom: 6 })
+- Line 1297: NO_PARAM_DESTRUCTURING - .margin({ top: 16 })
+- Line 1304: NO_PARAM_DESTRUCTURING - .constraintSize({ maxHeight: 250 })
+- Line 1319: NO_PARAM_DESTRUCTURING - .position({ x: 0, y: 0 })
+- Line 1451: NO_PARAM_DESTRUCTURING - .position({ x: 0, y: 0 })
+- Line 1475: NO_PARAM_DESTRUCTURING - .margin({ bottom: 20 })
+- Line 1482: NO_PARAM_DESTRUCTURING - .margin({ bottom: 8 })
+- Line 1496: NO_PARAM_DESTRUCTURING - .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+- Line 1498: NO_PARAM_DESTRUCTURING - .margin({ right: 8 })
+- Line 1509: NO_PARAM_DESTRUCTURING - .margin({ bottom: 20 })
+- Line 1516: NO_PARAM_DESTRUCTURING - .margin({ bottom: 8 })
+- Line 1530: NO_PARAM_DESTRUCTURING - .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+- Line 1532: NO_PARAM_DESTRUCTURING - .margin({ right: 8 })
+- Line 1543: NO_PARAM_DESTRUCTURING - .margin({ bottom: 20 })
+- Line 1567: NO_PARAM_DESTRUCTURING - .position({ x: 0, y: 0 })
+
+### d:\DevEcoStudioProjects\Vignette\entry\src\main\ets\pages\SettingsPage.ets
+- Line 294: NO_UI_IN_MODEL - Row() {
+- Line 295: NO_UI_IN_MODEL - Text('推荐: ')
+- Line 301: NO_UI_IN_MODEL - Text(API_PROVIDERS[this.selectedProviderIndex].models[0])
+- Line 312: NO_UI_IN_MODEL - Text(API_PROVIDERS[this.selectedProviderIndex].models[1])
+- Line 323: NO_UI_IN_MODEL - Text(API_PROVIDERS[this.selectedProviderIndex].models[2])
+- Line 338: NO_UI_IN_MODEL - Stack() {
+- Line 339: NO_UI_IN_MODEL - Column() {
+- Line 343: NO_UI_IN_MODEL - Column() {
+- Line 371: NO_UI_IN_MODEL - Column() {
+- Line 373: NO_UI_IN_MODEL - Column()
+- Line 385: NO_UI_IN_MODEL - Column() {
+- Line 386: NO_UI_IN_MODEL - Column() {
+- Line 387: NO_UI_IN_MODEL - Text('数据同步')
+- Line 393: NO_UI_IN_MODEL - Text(this.syncDialogMessage)
+- Line 398: NO_UI_IN_MODEL - Row() {
+- Line 436: NO_UI_IN_MODEL - Row() {
+- Line 437: NO_UI_IN_MODEL - Text('←')
+- Line 444: NO_UI_IN_MODEL - Text('设置')
+- Line 460: NO_UI_IN_MODEL - Column() {
+- Line 461: NO_UI_IN_MODEL - Text('API配置')
+- Line 468: NO_UI_IN_MODEL - Column() {
+- Line 470: NO_UI_IN_MODEL - Row() {
+- Line 471: NO_UI_IN_MODEL - Text('提供商')
+- Line 495: NO_UI_IN_MODEL - Row() {
+- Line 496: NO_UI_IN_MODEL - Text('基础URL')
+- Line 514: NO_UI_IN_MODEL - Text(this.apiBaseUrl)
+- Line 529: NO_UI_IN_MODEL - Row() {
+- Line 530: NO_UI_IN_MODEL - Text('API密钥')
+- Line 536: NO_UI_IN_MODEL - Row() {
+- Line 554: NO_UI_IN_MODEL - Text(this.showApiKey ? '👁' : '👁‍🗨')
+- Line 569: NO_UI_IN_MODEL - Row() {
+- Line 570: NO_UI_IN_MODEL - Text('模型')
+- Line 577: NO_UI_IN_MODEL - Column() {
+- Line 598: NO_UI_IN_MODEL - Column() {
+- Line 612: NO_UI_IN_MODEL - Text(this.testResult)
+- Line 631: NO_UI_IN_MODEL - Column() {
+- Line 632: NO_UI_IN_MODEL - Text('数据同步')
+- Line 639: NO_UI_IN_MODEL - Column() {
+- Line 654: NO_UI_IN_MODEL - Text(this.exportResult)
+- Line 678: NO_UI_IN_MODEL - Text(this.importResult)
+- Line 695: NO_UI_IN_MODEL - Column() {
+- Line 696: NO_UI_IN_MODEL - Text('偏好设置')
+- Line 703: NO_UI_IN_MODEL - Column() {
+- Line 705: NO_UI_IN_MODEL - Row() {
+- Line 706: NO_UI_IN_MODEL - Text('每日新词')
+- Line 712: NO_UI_IN_MODEL - Text(`${this.dailyNewWords}`)
+- Line 737: NO_UI_IN_MODEL - Row() {
+- Line 738: NO_UI_IN_MODEL - Text('5')
+- Line 742: NO_UI_IN_MODEL - Text('30')
+- Line 752: NO_UI_IN_MODEL - Row() {
+- Line 753: NO_UI_IN_MODEL - Text('启用发音')
+- Line 773: NO_UI_IN_MODEL - Row() {
+- Line 774: NO_UI_IN_MODEL - Text('主题')
+- Line 780: NO_UI_IN_MODEL - Row() {
+- Line 799: NO_UI_IN_MODEL - Text(label)
+- Line 813: NO_UI_IN_MODEL - Column() {
+- Line 814: NO_UI_IN_MODEL - Text('关于')
+- Line 821: NO_UI_IN_MODEL - Column() {
+- Line 822: NO_UI_IN_MODEL - Row() {
+- Line 823: NO_UI_IN_MODEL - Text('版本')
+- Line 827: NO_UI_IN_MODEL - Text('1.0.0')
+- Line 837: NO_UI_IN_MODEL - Row() {
+- Line 838: NO_UI_IN_MODEL - Text('开源')
+- Line 842: NO_UI_IN_MODEL - Text('MIT许可证')
+- Line 852: NO_UI_IN_MODEL - Row() {
+- Line 853: NO_UI_IN_MODEL - Column() {
+- Line 854: NO_UI_IN_MODEL - Text('词影 (单词大师)')
+- Line 857: NO_UI_IN_MODEL - Text('情境滚动记忆')
+- Line 179: NO_PARAM_DESTRUCTURING - options.push({ value: provider.name });
+- Line 188: NO_PARAM_DESTRUCTURING - options.push({ value: model });
+- Line 200: NO_PARAM_DESTRUCTURING - promptAction.showToast({ message: '同步操作正在进行中', duration: 2000 });
+- Line 231: NO_PARAM_DESTRUCTURING - promptAction.showToast({ message: '同步操作正在进行中', duration: 2000 });
+- Line 281: NO_PARAM_DESTRUCTURING - promptAction.showToast({ message: '已复制到剪贴板', duration: 1500 });
+- Line 283: NO_PARAM_DESTRUCTURING - promptAction.showToast({ message: '复制失败', duration: 1500 });
+- Line 304: NO_PARAM_DESTRUCTURING - .margin({ left: 8 })
+- Line 315: NO_PARAM_DESTRUCTURING - .margin({ left: 8 })
+- Line 326: NO_PARAM_DESTRUCTURING - .margin({ left: 8 })
+- Line 334: NO_PARAM_DESTRUCTURING - .margin({ top: 4 })
+- Line 351: NO_PARAM_DESTRUCTURING - .padding({ left: 16, right: 16, bottom: 32 })
+- Line 382: NO_PARAM_DESTRUCTURING - .position({ x: 0, y: 0 })
+- Line 391: NO_PARAM_DESTRUCTURING - .margin({ bottom: 16 })
+- Line 396: NO_PARAM_DESTRUCTURING - .margin({ bottom: 24 })
+- Line 431: NO_PARAM_DESTRUCTURING - .position({ x: 0, y: 0 })
+- Line 448: NO_PARAM_DESTRUCTURING - .margin({ left: 16 })
+- Line 454: NO_PARAM_DESTRUCTURING - .padding({ left: 16, right: 16 })
+- Line 466: NO_PARAM_DESTRUCTURING - .margin({ top: 24, bottom: 12 })
+- Line 480: NO_PARAM_DESTRUCTURING - .font({ size: 14 })
+- Line 482: NO_PARAM_DESTRUCTURING - .selectedOptionFont({ size: 14 })
+- Line 483: NO_PARAM_DESTRUCTURING - .optionFont({ size: 14 })
+- Line 490: NO_PARAM_DESTRUCTURING - .padding({ left: 16, right: 16 })
+- Line 492: NO_PARAM_DESTRUCTURING - Divider().color('#EEEEEE').margin({ left: 16 })
+- Line 503: NO_PARAM_DESTRUCTURING - TextInput({ text: this.apiBaseUrl, placeholder: 'https://api.example.com' })
+- Line 518: NO_PARAM_DESTRUCTURING - .textOverflow({ overflow: TextOverflow. Ellipsis })
+- Line 519: NO_PARAM_DESTRUCTURING - .constraintSize({ maxWidth: 200 })
+- Line 524: NO_PARAM_DESTRUCTURING - .padding({ left: 16, right: 16 })
+- Line 526: NO_PARAM_DESTRUCTURING - Divider().color('#EEEEEE').margin({ left: 16 })
+- Line 556: NO_PARAM_DESTRUCTURING - .margin({ left: 8 })
+- Line 564: NO_PARAM_DESTRUCTURING - .padding({ left: 16, right: 16 })
+- Line 566: NO_PARAM_DESTRUCTURING - Divider().color('#EEEEEE').margin({ left: 16 })
+- Line 578: NO_PARAM_DESTRUCTURING - TextInput({ text: this.selectedModel, placeholder: '模型名称' })
+- Line 595: NO_PARAM_DESTRUCTURING - .padding({ left: 16, right: 16 })
+- Line 615: NO_PARAM_DESTRUCTURING - .margin({ top: 12 })
+- Line 637: NO_PARAM_DESTRUCTURING - .margin({ top: 24, bottom: 12 })
+- Line 657: NO_PARAM_DESTRUCTURING - .margin({ top: 8 })
+- Line 661: NO_PARAM_DESTRUCTURING - Divider().color('#EEEEEE').margin({ left: 16, top: 12 })
+- Line 672: NO_PARAM_DESTRUCTURING - .margin({ top: 12 })
+- Line 681: NO_PARAM_DESTRUCTURING - .margin({ top: 8 })
+- Line 701: NO_PARAM_DESTRUCTURING - .margin({ top: 24, bottom: 12 })
+- Line 718: NO_PARAM_DESTRUCTURING - .padding({ left: 16, right: 16, top: 16 })
+- Line 728: NO_PARAM_DESTRUCTURING - .padding({ left: 16, right: 16 })
+- Line 747: NO_PARAM_DESTRUCTURING - .padding({ left: 16, right: 16, bottom: 8 })
+- Line 749: NO_PARAM_DESTRUCTURING - Divider().color('#EEEEEE').margin({ left: 16 })
+- Line 759: NO_PARAM_DESTRUCTURING - Toggle({ type: ToggleType.Switch, isOn: this.enableTTS })
+- Line 768: NO_PARAM_DESTRUCTURING - .padding({ left: 16, right:  16 })
+- Line 770: NO_PARAM_DESTRUCTURING - Divider().color('#EEEEEE').margin({ left: 16 })
+- Line 788: NO_PARAM_DESTRUCTURING - .padding({ left: 16, right:  16 })
+- Line 803: NO_PARAM_DESTRUCTURING - .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+- Line 805: NO_PARAM_DESTRUCTURING - .margin({ left: 4 })
+- Line 819: NO_PARAM_DESTRUCTURING - .margin({ top: 24, bottom: 12 })
+- Line 833: NO_PARAM_DESTRUCTURING - .padding({ left: 16, right:  16 })
+- Line 835: NO_PARAM_DESTRUCTURING - Divider().color('#EEEEEE').margin({ left: 16 })
+- Line 848: NO_PARAM_DESTRUCTURING - .padding({ left: 16, right: 16 })
+- Line 850: NO_PARAM_DESTRUCTURING - Divider().color('#EEEEEE').margin({ left: 16 })
+- Line 860: NO_PARAM_DESTRUCTURING - .margin({ top: 4 })
+- Line 884: NO_PARAM_DESTRUCTURING - .margin({ top: 32 })
+
+### d:\DevEcoStudioProjects\Vignette\entry\src\main\ets\ui\Animations.ets
+- Line 316: NO_UI_IN_MODEL - Column() {
+- Line 370: NO_UI_IN_MODEL - Column() {
+- Line 399: NO_UI_IN_MODEL - Column() {
+- Line 454: NO_UI_IN_MODEL - Column() {
+- Line 482: NO_UI_IN_MODEL - Column() {
+- Line 509: NO_UI_IN_MODEL - Column() {
+- Line 538: NO_UI_IN_MODEL - Column() {
+- Line 539: NO_UI_IN_MODEL - ForEach(Array.from({ length: count }), (item: ESObject, index: number) => {
+- Line 543: NO_UI_IN_MODEL - Column() {
+- Line 574: NO_UI_IN_MODEL - Column() {
+- Line 603: NO_UI_IN_MODEL - Column() {
+- Line 635: NO_UI_IN_MODEL - Column() {
+- Line 665: NO_UI_IN_MODEL - Column() {
+- Line 666: NO_UI_IN_MODEL - Row() {
+- Line 676: NO_UI_IN_MODEL - Text('成功！')
+- Line 703: NO_UI_IN_MODEL - Column() {
+- Line 704: NO_UI_IN_MODEL - Row() {
+- Line 714: NO_UI_IN_MODEL - Text('错误')
+- Line 739: NO_UI_IN_MODEL - Column() {
+- Line 765: NO_UI_IN_MODEL - Stack() {
+- Line 767: NO_UI_IN_MODEL - Column() {
+- Line 785: NO_UI_IN_MODEL - Column() {
+- Line 539: NO_PARAM_DESTRUCTURING - ForEach(Array.from({ length: count }), (item: ESObject, index: number) => {
+- Line 679: NO_PARAM_DESTRUCTURING - .margin({ left: 8 })
+- Line 717: NO_PARAM_DESTRUCTURING - .margin({ left: 8 })
+
+### d:\DevEcoStudioProjects\Vignette\entry\src\main\ets\ui\EnhancedCards.ets
+- Line 214: NO_UI_IN_MODEL - Column() {
+- Line 250: NO_UI_IN_MODEL - Column() {
+- Line 280: NO_UI_IN_MODEL - Column() {
+- Line 300: NO_UI_IN_MODEL - Column() {
+- Line 339: NO_UI_IN_MODEL - Column() {
+- Line 340: NO_UI_IN_MODEL - Text(word)
+- Line 348: NO_UI_IN_MODEL - Text(definition)
+- Line 374: NO_UI_IN_MODEL - Column() {
+- Line 375: NO_UI_IN_MODEL - Text(title)
+- Line 392: NO_UI_IN_MODEL - Row() {
+- Line 393: NO_UI_IN_MODEL - Text(`${progress} / ${total}`)
+- Line 399: NO_UI_IN_MODEL - Text(`${Math.round(progress / total * 100)}%`)
+- Line 426: NO_UI_IN_MODEL - Column() {
+- Line 427: NO_UI_IN_MODEL - Text(title)
+- Line 433: NO_UI_IN_MODEL - ForEach(stats, (stat: StatItem, index: number) => {
+- Line 434: NO_UI_IN_MODEL - Row() {
+- Line 435: NO_UI_IN_MODEL - Text(stat.label)
+- Line 440: NO_UI_IN_MODEL - Text(typeof stat.value === 'number' ? String(stat.value) : stat.value)
+- Line 471: NO_UI_IN_MODEL - Column() {
+- Line 479: NO_UI_IN_MODEL - Text(title)
+- Line 487: NO_UI_IN_MODEL - Text(subtitle)
+- Line 514: NO_UI_IN_MODEL - Row() {
+- Line 515: NO_UI_IN_MODEL - Column() {
+- Line 516: NO_UI_IN_MODEL - Text(title)
+- Line 524: NO_UI_IN_MODEL - Text(description)
+- Line 554: NO_UI_IN_MODEL - Column() {
+- Line 555: NO_UI_IN_MODEL - Text(title)
+- Line 561: NO_UI_IN_MODEL - Text(description)
+- Line 566: NO_UI_IN_MODEL - Row() {
+- Line 567: NO_UI_IN_MODEL - ForEach(actions, (action: ActionItem, index: number) => {
+- Line 602: NO_UI_IN_MODEL - Column() {
+- Line 609: NO_UI_IN_MODEL - Text(message)
+- Line 632: NO_UI_IN_MODEL - Column() {
+- Line 633: NO_UI_IN_MODEL - Row() {
+- Line 640: NO_UI_IN_MODEL - Text(title)
+- Line 649: NO_UI_IN_MODEL - Text(message)
+- Line 680: NO_UI_IN_MODEL - Column() {
+- Line 681: NO_UI_IN_MODEL - Row() {
+- Line 688: NO_UI_IN_MODEL - Text(title)
+- Line 697: NO_UI_IN_MODEL - Text(message)
+- Line 728: NO_UI_IN_MODEL - Column() {
+- Line 729: NO_UI_IN_MODEL - Row() {
+- Line 736: NO_UI_IN_MODEL - Text(title)
+- Line 745: NO_UI_IN_MODEL - Text(message)
+- Line 777: NO_UI_IN_MODEL - Column() {
+- Line 778: NO_UI_IN_MODEL - Row() {
+- Line 785: NO_UI_IN_MODEL - Text(title)
+- Line 794: NO_UI_IN_MODEL - Text(message)
+- Line 799: NO_UI_IN_MODEL - Row() {
+- Line 839: NO_UI_IN_MODEL - ForEach(items, (item: CardItem) => {
+- Line 865: NO_UI_IN_MODEL - ForEach(items, (item: CardItem) => {
+- Line 344: NO_PARAM_DESTRUCTURING - .margin({ bottom: 8 })
+- Line 352: NO_PARAM_DESTRUCTURING - .textOverflow({ overflow: TextOverflow.Ellipsis })
+- Line 379: NO_PARAM_DESTRUCTURING - .margin({ bottom: 12 })
+- Line 390: NO_PARAM_DESTRUCTURING - .margin({ bottom: 8 })
+- Line 431: NO_PARAM_DESTRUCTURING - .margin({ bottom: 16 })
+- Line 447: NO_PARAM_DESTRUCTURING - .margin({ bottom: index < stats.length - 1 ? 12 : 0 })
+- Line 476: NO_PARAM_DESTRUCTURING - .borderRadius({ topLeft: 12, topRight: 12, bottomLeft: 0, bottomRight: 0 })
+- Line 477: NO_PARAM_DESTRUCTURING - .margin({ bottom: 12 })
+- Line 484: NO_PARAM_DESTRUCTURING - .textOverflow({ overflow: TextOverflow.Ellipsis })
+- Line 485: NO_PARAM_DESTRUCTURING - .margin({ bottom: 4 })
+- Line 491: NO_PARAM_DESTRUCTURING - .textOverflow({ overflow: TextOverflow.Ellipsis })
+- Line 521: NO_PARAM_DESTRUCTURING - .textOverflow({ overflow: TextOverflow.Ellipsis })
+- Line 522: NO_PARAM_DESTRUCTURING - .margin({ bottom: 4 })
+- Line 528: NO_PARAM_DESTRUCTURING - .textOverflow({ overflow: TextOverflow.Ellipsis })
+- Line 559: NO_PARAM_DESTRUCTURING - .margin({ bottom: 8 })
+- Line 564: NO_PARAM_DESTRUCTURING - .margin({ bottom: 16 })
+- Line 576: NO_PARAM_DESTRUCTURING - .margin({ right: index < actions.length - 1 ? 8 : 0 })
+- Line 607: NO_PARAM_DESTRUCTURING - .margin({ bottom: 12 })
+- Line 638: NO_PARAM_DESTRUCTURING - .margin({ right: 8 })
+- Line 647: NO_PARAM_DESTRUCTURING - .margin({ bottom: 12 })
+- Line 652: NO_PARAM_DESTRUCTURING - .margin({ bottom: 16 })
+- Line 686: NO_PARAM_DESTRUCTURING - .margin({ right: 8 })
+- Line 695: NO_PARAM_DESTRUCTURING - .margin({ bottom: 12 })
+- Line 700: NO_PARAM_DESTRUCTURING - .margin({ bottom: 16 })
+- Line 734: NO_PARAM_DESTRUCTURING - .margin({ right: 8 })
+- Line 743: NO_PARAM_DESTRUCTURING - .margin({ bottom: 12 })
+- Line 748: NO_PARAM_DESTRUCTURING - .margin({ bottom: 16 })
+- Line 783: NO_PARAM_DESTRUCTURING - .margin({ right: 8 })
+- Line 792: NO_PARAM_DESTRUCTURING - .margin({ bottom: 12 })
+- Line 797: NO_PARAM_DESTRUCTURING - .margin({ bottom: 16 })
+- Line 864: NO_PARAM_DESTRUCTURING - List({ space: 12 }) {
+
+### d:\DevEcoStudioProjects\Vignette\entry\src\main\ets\ui\ProgressCharts.ets
+- Line 144: NO_UI_IN_MODEL - Column() {
+- Line 145: NO_UI_IN_MODEL - Text(title)
+- Line 150: NO_UI_IN_MODEL - Stack() {
+- Line 161: NO_UI_IN_MODEL - Text(`${Math.round(progress / total * 100)}%`)
+- Line 188: NO_UI_IN_MODEL - Column() {
+- Line 189: NO_UI_IN_MODEL - Text(title)
+- Line 195: NO_UI_IN_MODEL - Stack() {
+- Line 197: NO_UI_IN_MODEL - ForEach(data, (point: ChartDataPoint, index: number) => {
+- Line 200: NO_UI_IN_MODEL - Column() {
+- Line 202: NO_UI_IN_MODEL - Text(point.label)
+- Line 209: NO_UI_IN_MODEL - Row() {
+- Line 214: NO_UI_IN_MODEL - Text(`${point.value}`)
+- Line 246: NO_UI_IN_MODEL - Column() {
+- Line 247: NO_UI_IN_MODEL - Text(title)
+- Line 253: NO_UI_IN_MODEL - Row() {
+- Line 254: NO_UI_IN_MODEL - ForEach(data, (point: ChartDataPoint, index: number) => {
+- Line 257: NO_UI_IN_MODEL - Column() {
+- Line 258: NO_UI_IN_MODEL - Text(point.label)
+- Line 264: NO_UI_IN_MODEL - Column() {
+- Line 265: NO_UI_IN_MODEL - Row()
+- Line 300: NO_UI_IN_MODEL - Column() {
+- Line 301: NO_UI_IN_MODEL - Text(title)
+- Line 310: NO_UI_IN_MODEL - Row() {
+- Line 312: NO_UI_IN_MODEL - Stack() {
+- Line 329: NO_UI_IN_MODEL - Column() {
+- Line 330: NO_UI_IN_MODEL - ForEach(data, (point: ChartDataPoint) => {
+- Line 333: NO_UI_IN_MODEL - Row() {
+- Line 338: NO_UI_IN_MODEL - Text(point.label)
+- Line 342: NO_UI_IN_MODEL - Text(`${percentage}%`)
+- Line 373: NO_UI_IN_MODEL - ForEach(stats, (stat: StatsCardData, index: number) => {
+- Line 375: NO_UI_IN_MODEL - Column() {
+- Line 376: NO_UI_IN_MODEL - Row() {
+- Line 377: NO_UI_IN_MODEL - Text(stat.title)
+- Line 383: NO_UI_IN_MODEL - Text(stat.icon)
+- Line 392: NO_UI_IN_MODEL - Text(typeof stat.value === 'number' ? String(stat.value) : stat.value)
+- Line 399: NO_UI_IN_MODEL - Text(stat.subtitle)
+- Line 405: NO_UI_IN_MODEL - Row() {
+- Line 407: NO_UI_IN_MODEL - Text('↑')
+- Line 413: NO_UI_IN_MODEL - Text('↓')
+- Line 420: NO_UI_IN_MODEL - Text(`${Math.abs(stat.trendPercentage)}%`)
+- Line 457: NO_UI_IN_MODEL - Column() {
+- Line 458: NO_UI_IN_MODEL - Text(title)
+- Line 465: NO_UI_IN_MODEL - Column() {
+- Line 466: NO_UI_IN_MODEL - ForEach(data, (item: LearningProgressData, index: number) => {
+- Line 469: NO_UI_IN_MODEL - Row() {
+- Line 470: NO_UI_IN_MODEL - Text(dateStr)
+- Line 477: NO_UI_IN_MODEL - Column() {
+- Line 478: NO_UI_IN_MODEL - Row() {
+- Line 479: NO_UI_IN_MODEL - Text('学习:')
+- Line 484: NO_UI_IN_MODEL - Text(`${item.wordsLearned}`)
+- Line 493: NO_UI_IN_MODEL - Row() {
+- Line 494: NO_UI_IN_MODEL - Text('复习:')
+- Line 499: NO_UI_IN_MODEL - Text(`${item.wordsReviewed}`)
+- Line 532: NO_UI_IN_MODEL - Column() {
+- Line 533: NO_UI_IN_MODEL - Text(title)
+- Line 539: NO_UI_IN_MODEL - Row() {
+- Line 540: NO_UI_IN_MODEL - ForEach(data, (item: VocabularyDistributionData, index: number) => {
+- Line 543: NO_UI_IN_MODEL - Column() {
+- Line 544: NO_UI_IN_MODEL - Text(item.category)
+- Line 550: NO_UI_IN_MODEL - Row() {
+- Line 551: NO_UI_IN_MODEL - Row()
+- Line 560: NO_UI_IN_MODEL - Text(`${item.count} (${Math.round(item.percentage)}%)`)
+- Line 593: NO_UI_IN_MODEL - Column() {
+- Line 620: NO_UI_IN_MODEL - Row() {
+- Line 633: NO_UI_IN_MODEL - Text(`${Math.round(progress / total * 100)}%`)
+- Line 653: NO_UI_IN_MODEL - Stack() {
+- Line 665: NO_UI_IN_MODEL - Column() {
+- Line 666: NO_UI_IN_MODEL - Text(`${Math.round(progress / total * 100)}%`)
+- Line 671: NO_UI_IN_MODEL - Text(`${progress} / ${total}`)
+- Line 694: NO_UI_IN_MODEL - Column() {
+- Line 695: NO_UI_IN_MODEL - Text(title)
+- Line 700: NO_UI_IN_MODEL - Row() {
+- Line 712: NO_UI_IN_MODEL - Column() {
+- Line 713: NO_UI_IN_MODEL - Text(`${current} / ${target}`)
+- Line 718: NO_UI_IN_MODEL - Text(`${unit}`)
+- Line 148: NO_PARAM_DESTRUCTURING - .margin({ bottom: 8 })
+- Line 193: NO_PARAM_DESTRUCTURING - .margin({ bottom: 16 })
+- Line 206: NO_PARAM_DESTRUCTURING - .margin({ bottom: 4 })
+- Line 210: NO_PARAM_DESTRUCTURING - Circle({ width: 8, height: 8 })
+- Line 212: NO_PARAM_DESTRUCTURING - .margin({ right: 4 })
+- Line 221: NO_PARAM_DESTRUCTURING - .position({ x: `${index * 80 + 20}vp`, y: `${180 - height}vp` })
+- Line 251: NO_PARAM_DESTRUCTURING - .margin({ bottom: 16 })
+- Line 262: NO_PARAM_DESTRUCTURING - .margin({ bottom: 4 })
+- Line 269: NO_PARAM_DESTRUCTURING - .borderRadius({ topLeft: 4, topRight: 4, bottomLeft: 4, bottomRight: 4 })
+- Line 272: NO_PARAM_DESTRUCTURING - .padding({ right: 8, bottom: 4 })
+- Line 305: NO_PARAM_DESTRUCTURING - .margin({ bottom: 16 })
+- Line 326: NO_PARAM_DESTRUCTURING - .margin({ right: 24 })
+- Line 334: NO_PARAM_DESTRUCTURING - Circle({ width: 12, height: 12 })
+- Line 336: NO_PARAM_DESTRUCTURING - .margin({ right: 8 })
+- Line 345: NO_PARAM_DESTRUCTURING - .margin({ left: 8 })
+- Line 349: NO_PARAM_DESTRUCTURING - .margin({ bottom: 8 })
+- Line 385: NO_PARAM_DESTRUCTURING - .margin({ left: 8 })
+- Line 390: NO_PARAM_DESTRUCTURING - .margin({ bottom: 8 })
+- Line 396: NO_PARAM_DESTRUCTURING - .margin({ bottom: 4 })
+- Line 411: NO_PARAM_DESTRUCTURING - .margin({ right: 4 })
+- Line 417: NO_PARAM_DESTRUCTURING - .margin({ right: 4 })
+- Line 426: NO_PARAM_DESTRUCTURING - .margin({ top: 4 })
+- Line 462: NO_PARAM_DESTRUCTURING - .margin({ bottom: 16 })
+- Line 482: NO_PARAM_DESTRUCTURING - .margin({ right: 4 })
+- Line 491: NO_PARAM_DESTRUCTURING - .margin({ bottom: 4 })
+- Line 497: NO_PARAM_DESTRUCTURING - .margin({ right: 4 })
+- Line 512: NO_PARAM_DESTRUCTURING - .margin({ bottom: 8 })
+- Line 537: NO_PARAM_DESTRUCTURING - .margin({ bottom: 16 })
+- Line 548: NO_PARAM_DESTRUCTURING - .margin({ bottom: 4 })
+- Line 555: NO_PARAM_DESTRUCTURING - .borderRadius({ topLeft: 4, topRight: 4, bottomLeft: 4, bottomRight: 4 })
+- Line 558: NO_PARAM_DESTRUCTURING - .padding({ right: 8 })
+- Line 567: NO_PARAM_DESTRUCTURING - .margin({ bottom: 8 })
+- Line 596: NO_PARAM_DESTRUCTURING - .margin({ bottom: 24 })
+- Line 600: NO_PARAM_DESTRUCTURING - .margin({ bottom: 24 })
+- Line 636: NO_PARAM_DESTRUCTURING - .margin({ left: 12 })
+- Line 674: NO_PARAM_DESTRUCTURING - .margin({ top: 8 })
+- Line 698: NO_PARAM_DESTRUCTURING - .margin({ bottom: 8 })
+- Line 723: NO_PARAM_DESTRUCTURING - .margin({ left: 16 })
+- Line 739: NO_PARAM_DESTRUCTURING - .margin({ bottom: 16 })
+

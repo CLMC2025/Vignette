@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "微语单词 - 情境滚动记忆单词应用"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "微语单词应用主能力"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "微语单词"
+    }
+  ]
+}

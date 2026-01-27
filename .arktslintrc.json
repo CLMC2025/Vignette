@@ -1,0 +1,21 @@
+{
+  "rules": {
+    "no-any": "error",
+    "no-unknown": "error",
+    "static-method-this": "error",
+    "component-syntax": "error",
+    "indent": ["error", 2],
+    "naming-convention": "error",
+    "no-untyped-objects": "error",
+    "proper-decorator-use": "error",
+    "component-root-node": "error",
+    "state-management": "warning"
+  },
+  "ignore": [
+    "node_modules/**",
+    "build/**",
+    "*.backup.ets",
+    "test/**/*.ets"
+  ],
+  "customRules": []
+}

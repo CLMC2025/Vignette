@@ -1,0 +1,470 @@
+// =====================================================
+// Algorithm.ets - FSRS (Free Spaced Repetition Scheduler)
+// Simplified implementation for Vignette
+// =====================================================
+
+import {
+  FSRSState,
+  Rating,
+  HistoryItem,
+  WordItem,
+  WordStatus
+} from '../model/WordModel';
+import { EvolveScheduler, SchedulerMode } from '../evolve/EvolveScheduler';
+
+/**
+ * FSRS Algorithm Parameters
+ * These can be tuned for optimal learning
+ */
+class FSRSParams {
+  // Initial stability values for first review
+  static readonly INITIAL_STABILITY_AGAIN:  number = 0.4;
+  static readonly INITIAL_STABILITY_HARD: number = 0.9;
+  static readonly INITIAL_STABILITY_GOOD: number = 2.5;
+  static readonly INITIAL_STABILITY_EASY: number = 5.0;
+
+  // Difficulty adjustments
+  static readonly DIFFICULTY_DECAY:  number = -0.7;
+  static readonly DIFFICULTY_OFFSET: number = 0.2;
+
+  // Stability multipliers
+  static readonly STABILITY_FACTOR_AGAIN: number = 0.2;
+  static readonly STABILITY_FACTOR_HARD: number = 1.2;
+  static readonly STABILITY_FACTOR_GOOD: number = 2.5;
+  static readonly STABILITY_FACTOR_EASY: number = 3.5;
+
+  // Minimum/Maximum bounds
+  static readonly MIN_DIFFICULTY: number = 1.0;
+  static readonly MAX_DIFFICULTY: number = 10.0;
+  static readonly MIN_STABILITY: number = 0.1;
+  static readonly MAX_STABILITY:  number = 365.0;
+
+  // Retrievability decay
+  static readonly DECAY_FACTOR: number = 0.9;
+  static readonly FACTOR:  number = 19 / 81;
+}
+
+/**
+ * Result of a review calculation
+ */
+export class ReviewResult {
+  newState: FSRSState;
+  nextReviewMs: number;      // Timestamp for next review
+  intervalDays: number;      // Days until next review
+
+  constructor(
+    newState: FSRSState,
+    nextReviewMs: number,
+    intervalDays: number
+  ) {
+    this.newState = newState;
+    this.nextReviewMs = nextReviewMs;
+    this.intervalDays = intervalDays;
+  }
+}
+
+/**
+ * FSRS Algorithm Implementation
+ */
+export class FSRSAlgorithm {
+  private static instance: FSRSAlgorithm | null = null;
+
+  private constructor() {}
+
+  /**
+   * Singleton accessor
+   */
+  static getInstance(): FSRSAlgorithm {
+    if (FSRSAlgorithm.instance === null) {
+      FSRSAlgorithm.instance = new FSRSAlgorithm();
+    }
+    return FSRSAlgorithm.instance;
+  }
+
+  /**
+   * Calculate new state after review
+   * @param currentState Current FSRS state
+   * @param rating User's rating
+   * @param elapsedDays Days since last review
+   * @returns New review result
+   */
+  review(
+    currentState: FSRSState,
+    rating:  Rating,
+    elapsedDays:  number = 0
+  ): ReviewResult {
+    // Clone state to avoid mutation
+    const newState = currentState.clone();
+
+    // First review (new word)
+    if (currentState.reps === 0) {
+      return this.handleFirstReview(newState, rating);
+    }
+
+    // Subsequent reviews
+    return this.handleSubsequentReview(newState, rating, elapsedDays);
+  }
+
+  /**
+   * Handle first review of a new word
+   */
+  private handleFirstReview(state:  FSRSState, rating: Rating): ReviewResult {
+    let stability:  number;
+    let intervalDays: number;
+
+    switch (rating) {
+      case Rating.AGAIN:
+        stability = FSRSParams.INITIAL_STABILITY_AGAIN;
+        intervalDays = this.minutesToDays(10); // 10 minutes
+        state.lapses = 1;
+        break;
+      case Rating.HARD:
+        stability = FSRSParams.INITIAL_STABILITY_HARD;
+        intervalDays = 1;
+        state.reps = 1;
+        break;
+      case Rating.GOOD:
+        stability = FSRSParams.INITIAL_STABILITY_GOOD;
+        intervalDays = 1;
+        state.reps = 1;
+        break;
+      case Rating.EASY:
+        stability = FSRSParams.INITIAL_STABILITY_EASY;
+        intervalDays = 4;
+        state.reps = 1;
+        break;
+      default:
+        stability = FSRSParams.INITIAL_STABILITY_GOOD;
+        intervalDays = 1;
+        state.reps = 1;
+    }
+
+    state.stability = this.clampStability(stability);
+    state.difficulty = this.calculateInitialDifficulty(rating);
+    state.retrievability = 1.0;
+
+    const nextReviewMs = Date.now() + this.daysToMs(intervalDays);
+
+    return new ReviewResult(state, nextReviewMs, intervalDays);
+  }
+
+  /**
+   * Handle subsequent reviews
+   */
+  private handleSubsequentReview(
+    state: FSRSState,
+    rating:  Rating,
+    elapsedDays:  number
+  ): ReviewResult {
+    // Calculate current retrievability based on elapsed time
+    const retrievability = this.calculateRetrievability(
+      state.stability,
+      elapsedDays
+    );
+    state.retrievability = retrievability;
+
+    // Update difficulty based on rating
+    state.difficulty = this.updateDifficulty(state.difficulty, rating);
+
+    let newStability: number;
+    let intervalDays: number;
+
+    if (rating === Rating.AGAIN) {
+      // Failed recall - reset stability
+      state.lapses += 1;
+      newStability = this.calculateFailStability(state.stability, state.difficulty);
+      intervalDays = this.minutesToDays(10); // 10 minutes
+    } else {
+      // Successful recall
+      state.reps += 1;
+      newStability = this.calculateSuccessStability(
+        state.stability,
+        state.difficulty,
+        retrievability,
+        rating
+      );
+      intervalDays = Math.max(1, Math.round(newStability));
+    }
+
+    state.stability = this.clampStability(newStability);
+    state.retrievability = 1.0; // Reset after review
+
+    const nextReviewMs = Date.now() + this.daysToMs(intervalDays);
+
+    return new ReviewResult(state, nextReviewMs, intervalDays);
+  }
+
+  /**
+   * Calculate initial difficulty based on first rating
+   */
+  private calculateInitialDifficulty(rating: Rating): number {
+    // D0 = 5 - (rating - 3)
+    const d0 = 5 - (rating - 3);
+    return this.clampDifficulty(d0);
+  }
+
+  /**
+   * Update difficulty after review
+   */
+  private updateDifficulty(currentD: number, rating:  Rating): number {
+    // D' = D + offset * (rating - 3)
+    const delta = FSRSParams.DIFFICULTY_OFFSET * (3 - rating);
+    const newD = currentD + delta;
+    return this.clampDifficulty(newD);
+  }
+
+  /**
+   * Calculate stability after successful recall
+   */
+  private calculateSuccessStability(
+    s: number,
+    d: number,
+    r: number,
+    rating: Rating
+  ): number {
+    // Simplified FSRS formula
+    let factor:  number;
+    switch (rating) {
+      case Rating.HARD:
+        factor = FSRSParams.STABILITY_FACTOR_HARD;
+        break;
+      case Rating.GOOD:
+        factor = FSRSParams.STABILITY_FACTOR_GOOD;
+        break;
+      case Rating.EASY:
+        factor = FSRSParams.STABILITY_FACTOR_EASY;
+        break;
+      default:
+        factor = FSRSParams.STABILITY_FACTOR_GOOD;
+    }
+
+    // S' = S * factor * (11 - D) / 10 * (1 + (1 - R) * hardBonus)
+    const difficultyBonus = (11 - d) / 10;
+    const retrievabilityBonus = 1 + (1 - r) * 0.5;
+    const newS = s * factor * difficultyBonus * retrievabilityBonus;
+
+    return newS;
+  }
+
+  /**
+   * Calculate stability after failed recall (lapse)
+   */
+  private calculateFailStability(s:  number, d: number): number {
+    // S' = S * factor * sqrt(D / 10)
+    const factor = FSRSParams.STABILITY_FACTOR_AGAIN;
+    const difficultyFactor = Math.sqrt(d / 10);
+    const newS = Math.max(
+      FSRSParams.MIN_STABILITY,
+      s * factor * difficultyFactor
+    );
+    return newS;
+  }
+
+  /**
+   * Calculate retrievability based on elapsed time
+   * R(t) = (1 + FACTOR * t/S)^DECAY
+   */
+  private calculateRetrievability(stability: number, elapsedDays: number): number {
+    if (stability <= 0) return 0;
+    if (elapsedDays <= 0) return 1;
+
+    const power = FSRSParams.DECAY_FACTOR;
+    const factor = FSRSParams.FACTOR;
+    const r = Math.pow(1 + factor * elapsedDays / stability, power);
+
+    return Math.max(0, Math.min(1, r));
+  }
+
+  /**
+   * Clamp difficulty to valid range
+   */
+  private clampDifficulty(d: number): number {
+    return Math.max(
+      FSRSParams.MIN_DIFFICULTY,
+      Math.min(FSRSParams.MAX_DIFFICULTY, d)
+    );
+  }
+
+  /**
+   * Clamp stability to valid range
+   */
+  private clampStability(s: number): number {
+    return Math.max(
+      FSRSParams.MIN_STABILITY,
+      Math.min(FSRSParams.MAX_STABILITY, s)
+    );
+  }
+
+  /**
+   * Convert days to milliseconds
+   */
+  private daysToMs(days: number): number {
+    return days * 24 * 60 * 60 * 1000;
+  }
+
+  /**
+   * Convert minutes to days (fraction)
+   */
+  private minutesToDays(minutes: number): number {
+    return minutes / (24 * 60);
+  }
+
+  /**
+   * Calculate elapsed days since last review
+   */
+  calculateElapsedDays(lastReviewMs: number): number {
+    const now = Date.now();
+    const elapsedMs = now - lastReviewMs;
+    return elapsedMs / (24 * 60 * 60 * 1000);
+  }
+
+  /**
+   * Determine new word status based on state
+   */
+  determineStatus(state: FSRSState): WordStatus {
+    if (state.reps === 0) {
+      return WordStatus.NEW;
+    } else if (state.reps < 2 || state.stability < 1) {
+      return WordStatus.LEARNING;
+    } else if (state.stability >= 21) {
+      return WordStatus.MASTERED;
+    } else {
+      return WordStatus.REVIEW;
+    }
+  }
+
+  /**
+   * Preview intervals for all ratings
+   * Returns map of rating -> interval in days
+   */
+  previewIntervals(currentState: FSRSState, elapsedDays:  number): Map<Rating, number> {
+    const intervals = new Map<Rating, number>();
+
+    const ratings:  Rating[] = [Rating.AGAIN, Rating.HARD, Rating.GOOD, Rating.EASY];
+    for (const rating of ratings) {
+      const result = this.review(currentState.clone(), rating, elapsedDays);
+      intervals.set(rating, result.intervalDays);
+    }
+
+    return intervals;
+  }
+}
+
+/**
+ * Helper class to process word reviews
+ */
+export class WordReviewer {
+  private algorithm: FSRSAlgorithm;
+
+  constructor() {
+    this.algorithm = FSRSAlgorithm.getInstance();
+  }
+
+  /**
+   * Process a review and return updated word
+   * @param word The word being reviewed
+   * @param rating User's rating
+   * @param lastReviewMs Timestamp of last review (for elapsed calculation)
+   * @returns Updated WordItem with new state and history
+   */
+  processReview(word: WordItem, rating: Rating, lastReviewMs: number = 0): WordItem {
+    // Calculate elapsed days
+    let elapsedDays = 0;
+    if (lastReviewMs > 0 && word.history.getReviewCount() > 0) {
+      elapsedDays = this.algorithm.calculateElapsedDays(lastReviewMs);
+    }
+
+    // Clone current state for history
+    const stateBefore = word.fsrsState.clone();
+
+    const isFirstReview = (word.fsrsState.reps === 0);
+
+    // Calculate new state
+    const result = this.algorithm.review(word.fsrsState, rating, elapsedDays);
+
+    // Optionally adjust next interval using evolved policy
+    const mode: SchedulerMode = EvolveScheduler.getMode();
+    const intervalDays: number = EvolveScheduler.decideIntervalDays(
+      mode,
+      rating,
+      isFirstReview,
+      result.intervalDays,
+      result.newState
+    );
+
+    const nextReviewMs: number = Date.now() + intervalDays * 24 * 60 * 60 * 1000;
+
+    // Create history item
+    const historyItem = new HistoryItem(
+      Date.now(),
+      rating,
+      stateBefore,
+      result.newState.clone(),
+      intervalDays
+    );
+
+    // Update word
+    word.fsrsState = result.newState;
+    word.dueDate = nextReviewMs;
+    word.history.addEntry(historyItem);
+    word.updatedAt = Date.now();
+
+    // Update status
+    word.status = this.algorithm.determineStatus(word.fsrsState);
+
+    return word;
+  }
+
+  /**
+   * Get preview of next intervals for UI display
+   */
+  getIntervalPreviews(word: WordItem): Map<Rating, string> {
+    const lastReviewMs = this.getLastReviewTime(word);
+    const elapsedDays = lastReviewMs > 0
+      ? this.algorithm.calculateElapsedDays(lastReviewMs)
+      : 0;
+
+    const intervals = this.algorithm.previewIntervals(word.fsrsState, elapsedDays);
+    const formatted = new Map<Rating, string>();
+
+    intervals.forEach((days:  number, rating: Rating) => {
+      formatted.set(rating, this.formatInterval(days));
+    });
+
+    return formatted;
+  }
+
+  /**
+   * Format interval for display
+   */
+  private formatInterval(days: number): string {
+    if (days < 1 / 24) {
+      // Less than 1 hour
+      const minutes = Math.round(days * 24 * 60);
+      return `${minutes}m`;
+    } else if (days < 1) {
+      // Less than 1 day
+      const hours = Math.round(days * 24);
+      return `${hours}h`;
+    } else if (days < 30) {
+      return `${Math.round(days)}d`;
+    } else if (days < 365) {
+      const months = Math.round(days / 30);
+      return `${months}mo`;
+    } else {
+      const years = Math.round(days / 365 * 10) / 10;
+      return `${years}y`;
+    }
+  }
+
+  /**
+   * Get last review timestamp
+   */
+  private getLastReviewTime(word: WordItem): number {
+    const count = word.history.getReviewCount();
+    if (count > 0) {
+      return word.history.items[count - 1].timestamp;
+    }
+    return 0;
+  }
+}

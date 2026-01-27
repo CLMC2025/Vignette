@@ -1,0 +1,11 @@
+{
+  "src": [
+    "pages/Index",
+    "pages/WordBookPage",
+    "pages/WordDetailPage",
+    "pages/ReadPage",
+    "pages/SettingsPage",
+    "pages/ImportPage",
+    "pages/WordListPage"
+  ]
+}
