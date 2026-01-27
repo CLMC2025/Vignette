@@ -850,6 +850,15 @@ Return ONLY the story text, no word count or explanations.`;
       story = story.slice(1, -1);
     }
 
+    // Remove ** symbols around target words (Issue #2 fix)
+    story = story.replace(/\*\*/g, '');
+    
+    // Remove any remaining markdown bold/italic markers
+    story = story.replace(/\*/g, '');
+    
+    // Normalize whitespace
+    story = story.replace(/\s+/g, ' ').trim();
+
     // Validate that target word is included
     const lowerStory = story.toLowerCase();
     if (!lowerStory.includes(targetWord.toLowerCase())) {
@@ -1240,18 +1249,22 @@ private buildMinimalStory(targetWord: string, supportWords: string[]): string {
     const allWords = [targetWord, ...supportWords];
     const wordList = allWords.join(', ');
 
+    // Issue #2 & #8 fix: Enhanced prompt with better diversity instructions
     return `You are a creative English writing assistant. Write a short micro-story (${minWords}-${maxWords} words) that naturally incorporates these vocabulary words: ${wordList}
 
 The story should:
-1.Be between ${minWords} and ${maxWords} words (count carefully)
-2.Use simple, clear English suitable for learners
-3.Have a complete mini-narrative (beginning, middle, hint of ending)
-4.Make the target word "${targetWord}" appear naturally ${minTargetOccurrences}-${maxTargetOccurrences} times
-5.Be interesting and slightly unexpected
-6.Style: ${styleDescription}
-7.Difficulty level: ${difficultyDescription}
+1. Be between ${minWords} and ${maxWords} words (count carefully)
+2. Use simple, clear English suitable for learners
+3. Have a complete mini-narrative (beginning, middle, hint of ending)
+4. Make the target word "${targetWord}" appear naturally ${minTargetOccurrences}-${maxTargetOccurrences} times
+5. Be interesting and slightly unexpected
+6. Style: ${styleDescription}
+7. Difficulty level: ${difficultyDescription}
+8. IMPORTANT: Vary the position of "${targetWord}" - avoid placing it in the same sentence position each time
+9. IMPORTANT: Use diverse sentence structures and varied contexts
+10. IMPORTANT: Do NOT use markdown formatting like ** or * around words
 
-Return ONLY the story text, no word count or explanations.`;
+Return ONLY the plain story text, no word count, no explanations, no formatting symbols.`;
   }
 
   /**

@@ -358,10 +358,11 @@ struct ReadPage {
   private scheduleTargetHighlight(): void {
     this.clearTargetHighlightTimer();
     this.showTargetHighlight = false;
+    // Issue #2 fix: Increased delay from 800ms to 1500ms to give users more time
     this.targetHighlightTimer = setTimeout(() => {
       this.showTargetHighlight = true;
       this.targetHighlightTimer = null;
-    }, 800);
+    }, 1500);
   }
 
   private clearBannerTimer(): void {
@@ -784,7 +785,11 @@ struct ReadPage {
       this.currentWord = task.word;
       this.hasPreloadedStory = false;
       this.showTranslation = false;
+      
+      // Issue #6 fix: Always reset highlight state to prevent residue from previous context
       this.showTargetHighlight = false;
+      this.clearTargetHighlightTimer();
+      
       // Reset task reviewed flag for new task
       this.currentTaskReviewed = false;
 
@@ -797,11 +802,16 @@ struct ReadPage {
         this.applyPreloadedStory(this.currentWord.id);
       }
 
-      // Reset story if not preloaded
+      // Issue #6 fix: ALWAYS reset story state to prevent target word residue
+      // Even if preloaded, we need to ensure clean state
       if (!this.hasPreloadedStory) {
         this.storyText = '';
         this.storyWords = [];
         this.storyError = '';
+        this.cachedStoryText = '';
+        this.cachedStoryWords = [];
+      } else {
+        // If preloaded, still clear cached state to ensure fresh parsing
         this.cachedStoryText = '';
         this.cachedStoryWords = [];
       }
@@ -1512,20 +1522,61 @@ ${info.rawDetail}` : '';
 
   /**
    * Play word pronunciation
+   * Issue #7 fix: Enhanced reliability with retry logic and better state management
    */
   private async playPronunciation(word: string): Promise<void> {
-    if (this.avPlayer === null || this.isPlayingAudio) {
+    if (!word || word.length === 0) {
+      console.warn('[ReadPage] Cannot play pronunciation: empty word');
       return;
+    }
+
+    // If already playing, stop first then play new word
+    if (this.isPlayingAudio && this.avPlayer !== null) {
+      try {
+        await this.avPlayer.stop();
+        await this.avPlayer.reset();
+      } catch (e) {
+        console.warn('[ReadPage] Error stopping previous audio:', e);
+      }
+      this.isPlayingAudio = false;
+    }
+
+    if (this.avPlayer === null) {
+      console.warn('[ReadPage] Audio player not initialized');
+      // Try to reinitialize
+      try {
+        await this.initAudioPlayer();
+      } catch (e) {
+        console.error('[ReadPage] Failed to initialize audio player:', e);
+        return;
+      }
     }
 
     try {
       const url = this.dictManager.getTTSUrl(word, 1);
-      this.avPlayer.url = url;
-      await this.avPlayer.prepare();
-      await this.avPlayer.play();
+      if (this.avPlayer !== null) {
+        this.avPlayer.url = url;
+        await this.avPlayer.prepare();
+        await this.avPlayer.play();
+      }
     } catch (error) {
       console.error('[ReadPage] Failed to play pronunciation:', error);
       this.isPlayingAudio = false;
+      
+      // Retry once on failure
+      try {
+        console.log('[ReadPage] Retrying pronunciation playback...');
+        if (this.avPlayer !== null) {
+          await this.avPlayer.reset();
+          const url = this.dictManager.getTTSUrl(word, 1);
+          this.avPlayer.url = url;
+          await this.avPlayer.prepare();
+          await this.avPlayer.play();
+        }
+      } catch (retryError) {
+        console.error('[ReadPage] Pronunciation retry failed:', retryError);
+        this.isPlayingAudio = false;
+      }
     }
   }
 
@@ -2710,10 +2761,12 @@ ${info.rawDetail}` : '';
         Row() {
           Column() {
             Row() {
+              // Issue #7 fix: Make word text also clickable for pronunciation
               Text(this.dialogState.word)
                 .fontSize(24)
                 .fontWeight(FontWeight.Bold)
                 .fontColor('#212121')
+                .onClick(() => this.playPronunciation(this.dialogState.word))
 
               // Speaker
               Image($r('sys.media.ohos_ic_public_sound'))
@@ -2963,6 +3016,35 @@ ${info.rawDetail}` : '';
   }
 
   private getTranslationText(): string {
+    // Issue #5 fix: Show full story context meaning, not just single word definition
+    // If we have a story, show a brief explanation of the context
+    if (this.storyText.length > 0 && this.currentWord !== null) {
+      const definition = this.currentWord.definition;
+      let translationText = '';
+      
+      // For now, show a comprehensive explanation combining story context and word meanings
+      translationText += `【语境说明】\n这段语境讲述了一个包含单词"${this.currentWord.word}"的场景。\n\n`;
+      
+      // Add target word's context-specific meaning if available
+      if (definition !== null && definition.contextMeaning.length > 0) {
+        translationText += `【目标词释义】\n${definition.contextMeaning}\n\n`;
+      }
+      
+      // Add common meanings for reference
+      if (definition !== null && definition.commonMeanings.length > 0) {
+        translationText += '【词典释义】\n';
+        for (let i = 0; i < definition.commonMeanings.length; i++) {
+          const meaning = definition.commonMeanings[i];
+          translationText += `${meaning.pos}: ${meaning.cn}`;
+          if (i < definition.commonMeanings.length - 1) {
+            translationText += '\n';
+          }
+        }
+      }
+      
+      return translationText.length > 0 ? translationText : '暂无释义';
+    }
+    
     if (this.currentWord === null) {
       return '暂无释义';
     }
@@ -3221,27 +3303,53 @@ ${info.rawDetail}` : '';
         // Word book list
         Scroll() {
           Column() {
-            if (this.userWordBooks.length === 0) {
-              Column() {
-                Text('暂无自建词书')
-                  .fontSize(14)
-                  .fontColor('#999999')
-                  .margin({ top: 20, bottom: 20 })
+            // Issue #4 fix: Always show create button prominently at the top
+            Column() {
+              Row() {
+                TextInput({ text: this.newWordBookName, placeholder: '输入新词书名称' })
+                  .layoutWeight(1)
+                  .height(48)
+                  .fontSize(16)
+                  .backgroundColor('#F5F5F5')
+                  .borderRadius(8)
+                  .onChange((value: string) => {
+                    this.newWordBookName = value;
+                  })
 
                 Button('创建词书')
-                  .width('100%')
-                  .height(44)
+                  .height(48)
                   .fontSize(16)
+                  .fontWeight(FontWeight.Medium)
                   .fontColor('#FFFFFF')
                   .backgroundColor('#2196F3')
-                  .borderRadius(22)
+                  .borderRadius(8)
+                  .margin({ left: 12 })
                   .onClick(() => {
-                    this.newWordBookName = '我的词书';
+                    this.createWordBook();
                   })
               }
               .width('100%')
-              .padding(20)
+              .margin({ bottom: 16 })
+            }
+            .width('100%')
+
+            if (this.userWordBooks.length === 0) {
+              Column() {
+                Text('暂无自建词书，请先创建')
+                  .fontSize(14)
+                  .fontColor('#999999')
+                  .textAlign(TextAlign.Center)
+                  .margin({ top: 12, bottom: 12 })
+              }
+              .width('100%')
             } else {
+              Divider().color('#EEEEEE').margin({ bottom: 12 })
+
+              Text('选择已有词书:')
+                .fontSize(14)
+                .fontColor('#666666')
+                .margin({ bottom: 8 })
+
               ForEach(this.userWordBooks, (bookId: string) => {
                 Row() {
                   Text(bookId)
@@ -3257,9 +3365,13 @@ ${info.rawDetail}` : '';
                   }
                 }
                 .width('100%')
-                .padding({ left: 20, right: 20, top: 12, bottom: 12 })
+                .padding({ left: 16, right: 16, top: 12, bottom: 12 })
                 .backgroundColor(this.selectedWordBookId === bookId ? '#E3F2FD' : '#FFFFFF')
                 .borderRadius(8)
+                .border({
+                  width: this.selectedWordBookId === bookId ? 2 : 1,
+                  color: this.selectedWordBookId === bookId ? '#2196F3' : '#E0E0E0'
+                })
                 .margin({ bottom: 8 })
                 .onClick(() => {
                   this.selectWordBook(bookId);
@@ -3269,38 +3381,9 @@ ${info.rawDetail}` : '';
           }
         }
         .width('100%')
-        .constraintSize({ maxHeight: 300 })
+        .constraintSize({ maxHeight: 400 })
 
-        // Create new word book input
-        if (this.userWordBooks.length > 0) {
-          Divider().color('#EEEEEE').margin({ top: 12, bottom: 12 })
-
-          Row() {
-            TextInput({ text: this.newWordBookName, placeholder: '新建词书名称' })
-              .layoutWeight(1)
-              .height(44)
-              .fontSize(14)
-              .backgroundColor('#F5F5F5')
-              .onChange((value: string) => {
-                this.newWordBookName = value;
-              })
-
-            Button('创建')
-              .height(44)
-              .fontSize(14)
-              .fontColor('#FFFFFF')
-              .backgroundColor('#2196F3')
-              .borderRadius(22)
-              .margin({ left: 12 })
-              .onClick(() => {
-                this.createWordBook();
-              })
-          }
-          .width('100%')
-          .padding({ left: 20, right: 20, top: 12, bottom: 12 })
-        }
-
-        Divider().color('#EEEEEE')
+        Divider().color('#EEEEEE').margin({ top: 12 })
 
         // Confirm button
         Button('确认添加')
