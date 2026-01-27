@@ -1907,13 +1907,22 @@ ${info.rawDetail}` : '';
 
   /**
    * Process review with given rating
+   * Issue #6 fix: Add better state isolation to prevent stacking reviews
    */
   private async processReview(rating: Rating): Promise<void> {
     const startTime = Date.now();
     console.log(`[Perf] processReview started with rating: ${rating}`);
 
-    const wordItem = this.dialogState.wordItem;
+    // Issue #6 fix: Use currentWord instead of dialogState.wordItem for more reliable state
+    const wordItem = this.currentWord;
     if (wordItem === null) {
+      console.warn('[ReadPage] processReview called with null currentWord, ignoring');
+      return;
+    }
+
+    // Additional safety check: ensure we're processing the right task
+    if (this.currentTask === null || this.currentTask.word.id !== wordItem.id) {
+      console.warn('[ReadPage] Task/word mismatch in processReview, ignoring to prevent stacking');
       return;
     }
 
