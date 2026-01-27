@@ -1569,8 +1569,9 @@ ${info.rawDetail}` : '';
       }
     }
 
+    const TTS_VOICE_TYPE_US = 1; // US pronunciation
     try {
-      const url = this.dictManager.getTTSUrl(word, 1);
+      const url = this.dictManager.getTTSUrl(word, TTS_VOICE_TYPE_US);
       if (this.avPlayer !== null) {
         this.avPlayer.url = url;
         await this.avPlayer.prepare();
@@ -1585,7 +1586,7 @@ ${info.rawDetail}` : '';
         console.log('[ReadPage] Retrying pronunciation playback...');
         if (this.avPlayer !== null) {
           await this.avPlayer.reset();
-          const url = this.dictManager.getTTSUrl(word, 1);
+          const url = this.dictManager.getTTSUrl(word, TTS_VOICE_TYPE_US);
           this.avPlayer.url = url;
           await this.avPlayer.prepare();
           await this.avPlayer.play();
@@ -1921,7 +1922,13 @@ ${info.rawDetail}` : '';
     }
 
     // Additional safety check: ensure we're processing the right task
-    if (this.currentTask === null || this.currentTask.word.id !== wordItem.id) {
+    // Prevent review stacking by verifying task/word alignment
+    if (this.currentTask === null) {
+      console.warn('[ReadPage] No current task in processReview, ignoring');
+      return;
+    }
+    
+    if (this.currentTask.word?.id !== wordItem?.id) {
       console.warn('[ReadPage] Task/word mismatch in processReview, ignoring to prevent stacking');
       return;
     }
@@ -3049,7 +3056,9 @@ ${info.rawDetail}` : '';
       let translationText = '';
       
       // For now, show a comprehensive explanation combining story context and word meanings
-      translationText += `【语境说明】\n这段语境讲述了一个包含单词"${this.currentWord.word}"的场景。\n\n`;
+      // Sanitize word to prevent any potential display issues
+      const safeWord = this.currentWord.word.replace(/[<>]/g, '');
+      translationText += `【语境说明】\n这段语境讲述了一个包含单词"${safeWord}"的场景。\n\n`;
       
       // Add target word's context-specific meaning if available
       if (definition !== null && definition.contextMeaning.length > 0) {

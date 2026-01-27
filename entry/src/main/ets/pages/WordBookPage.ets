@@ -37,6 +37,7 @@ struct WordBookPage {
   private resourceMgr: resourceManager.ResourceManager | null = null;
   // Issue #6 fix: Prevent multiple rapid clicks causing freeze/crash
   private isNavigating: boolean = false;
+  private readonly NAVIGATION_COOLDOWN_MS: number = 1000;
 
   aboutToAppear(): void {
     this.ensureDB();
@@ -387,7 +388,7 @@ struct WordBookPage {
         // Reset flag after navigation completes
         setTimeout(() => {
           this.isNavigating = false;
-        }, 1000);
+        }, this.NAVIGATION_COOLDOWN_MS);
       }).catch((err) => {
         console.error('[WordBookPage] Navigation failed:', err);
         this.isNavigating = false;
