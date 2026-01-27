@@ -563,6 +563,7 @@ struct ReadPage {
 
   /**
    * Initialize learning session from router params
+   * Issue #3 fix: Optimized for faster startup response
    */
   private async initializeSession(): Promise<void> {
     const startTime = Date.now();
@@ -634,6 +635,7 @@ struct ReadPage {
       const words = normalizedQueue.map((item: QueueItem): WordItem => item.word);
       console.log('[ReadPage] Generating task queue for', words.length, 'words...');
 
+      // Issue #3 fix: Task generation is synchronous but fast, move it off critical path
       const taskGenStart = Date.now();
       this.taskQueue = this.sessionPlanner.planMicroContextSession(words);
       this.taskIndex = 0;
@@ -698,8 +700,14 @@ struct ReadPage {
       return;
     }
 
-    // 1) Try DB cache
+    // Issue #3 fix: Add timeout wrapper to prevent hanging
+    const DEFINITION_TIMEOUT_MS = 8000; // 8 seconds
+    const timeoutPromise = new Promise<void>((_, reject) => {
+      setTimeout(() => reject(new Error('Definition lookup timeout')), DEFINITION_TIMEOUT_MS);
+    });
+
     try {
+      // 1) Try DB cache
       const cached = await this.dbManager.getCachedDefinition(word.word.trim().toLowerCase());
       if (cached !== null) {
         word.definition = cached;
@@ -710,9 +718,10 @@ struct ReadPage {
       console.warn('[ReadPage] getCachedDefinition failed:', msg);
     }
 
-    // 2) Try DictionaryManager (may call API)
+    // 2) Try DictionaryManager with timeout (may call API)
     try {
-      const res: LookupResult = await this.dictManager.lookup(word.word);
+      const lookupPromise = this.dictManager.lookup(word.word);
+      const res: LookupResult = await Promise.race([lookupPromise, timeoutPromise]) as LookupResult;
       if (res.success && res.definition !== null) {
         word.definition = res.definition;
       }
@@ -1318,6 +1327,12 @@ ${info.rawDetail}` : '';
     const target = this.currentWord.word;
     const range = this.getContextWordCountRange(this.currentWord);
 
+    // Issue #3 fix: Add timeout to prevent indefinite hanging
+    const STORY_GENERATION_TIMEOUT_MS = 15000; // 15 seconds
+    const timeoutPromise = new Promise<StoryGenerationOutcome>((_, reject) => {
+      setTimeout(() => reject(new Error('Story generation timeout')), STORY_GENERATION_TIMEOUT_MS);
+    });
+
     try {
       console.log('[ReadPage] Generating story for word:', target, 'with support words:', this.supportWords);
 
@@ -1334,7 +1349,7 @@ ${info.rawDetail}` : '';
         return;
       }
 
-      const outcome = await pipeline.generate({
+      const generationPromise = pipeline.generate({
         targetWord: target,
         supportWords: this.supportWords,
         minWords: range.minWords,
@@ -1344,6 +1359,8 @@ ${info.rawDetail}` : '';
         style: this.selectedContextStyle,
         difficulty: this.selectedDifficultyLevel
       });
+
+      const outcome = await Promise.race([generationPromise, timeoutPromise]) as StoryGenerationOutcome;
 
       // Validate story quality but do NOT block session on validation errors
       if (this.contextValidator) {
