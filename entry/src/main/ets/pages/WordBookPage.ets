@@ -35,6 +35,9 @@ struct WordBookPage {
   private dbManager: DBManager = DBManager.getInstance();
   private initialized: boolean = false;
   private resourceMgr: resourceManager.ResourceManager | null = null;
+  // Issue #6 fix: Prevent multiple rapid clicks causing freeze/crash
+  private isNavigating: boolean = false;
+  private readonly NAVIGATION_COOLDOWN_MS: number = 1000;
 
   aboutToAppear(): void {
     this.ensureDB();
@@ -366,13 +369,29 @@ struct WordBookPage {
     .border({ width: 1, color: '#E5ECF7' })
     .margin({ bottom: 12 })
     .onClick(() => {
+      // Issue #6 fix: Debounce navigation to prevent freeze/crash from multiple clicks
+      if (this.isNavigating) {
+        console.log('[WordBookPage] Navigation already in progress, ignoring click');
+        return;
+      }
+      
+      this.isNavigating = true;
       this.setCurrentBook(book.id);
+      
       router.pushUrl({
         url: 'pages/WordListPage',
         params: {
           bookId: book.id,
           bookName: book.name
         }
+      }).then(() => {
+        // Reset flag after navigation completes
+        setTimeout(() => {
+          this.isNavigating = false;
+        }, this.NAVIGATION_COOLDOWN_MS);
+      }).catch((err) => {
+        console.error('[WordBookPage] Navigation failed:', err);
+        this.isNavigating = false;
       });
     });
   }
