@@ -389,7 +389,7 @@ struct WordBookPage {
         setTimeout(() => {
           this.isNavigating = false;
         }, this.NAVIGATION_COOLDOWN_MS);
-      }).catch((err) => {
+      }).catch((err: Error) => {
         console.error('[WordBookPage] Navigation failed:', err);
         this.isNavigating = false;
       });
