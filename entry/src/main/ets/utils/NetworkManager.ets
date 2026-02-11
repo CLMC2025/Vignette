@@ -35,26 +35,53 @@ export interface NetworkRequestOptions {
 }
 
 /**
+ * Retry configuration
+ */
+export interface RetryConfig {
+  maxRetries?: number;           // Maximum number of retry attempts (default: 3)
+  initialDelayMs?: number;       // Initial delay before first retry (default: 1000ms)
+  maxDelayMs?: number;          // Maximum delay between retries (default: 30000ms)
+  backoffMultiplier?: number;   // Exponential backoff multiplier (default: 2.0)
+  retryableStatusCodes?: number[]; // HTTP status codes that should trigger retry (default: [408, 429, 500, 502, 503, 504])
+}
+
+/**
  * Unified network manager with lifecycle management
+ * Features:
+ * - Automatic retry with exponential backoff
+ * - Request lifecycle management (cancellation)
+ * - Response caching with TTL
+ * - Request deduplication
  */
 export class NetworkManager {
   private activeRequests: Map<string, http.HttpRequest> = new Map<string, http.HttpRequest>();
   private cache: Map<string, CachedResponse<unknown>> = new Map<string, CachedResponse<unknown>>();
   private readonly MAX_CACHE_SIZE: number = 100;
+  
+  // Default retry configuration
+  private defaultRetryConfig: RetryConfig = {
+    maxRetries: 3,
+    initialDelayMs: 1000,
+    maxDelayMs: 30000,
+    backoffMultiplier: 2.0,
+    retryableStatusCodes: [408, 429, 500, 502, 503, 504]
+  };
 
   /**
-   * Make an HTTP request with automatic lifecycle management
+   * Make an HTTP request with automatic lifecycle management and retry
    * @param requestId Unique identifier for this request (used for cancellation and caching)
    * @param url Request URL
    * @param options Request options
    * @param cacheDurationMs Cache duration in milliseconds (0 to disable caching)
+   * @param retryConfig Retry configuration (undefined to use defaults)
    * @returns Parsed response data
    */
   async request<T>(
     requestId: string,
     url: string,
     options: NetworkRequestOptions = {},
-    cacheDurationMs: number = 0
+    cacheDurationMs: number = 0,
+    retryConfig?: RetryConfig
   ): Promise<T> {
     // Check cache first
     if (cacheDurationMs > 0) {
@@ -65,6 +92,66 @@ export class NetworkManager {
       }
     }
 
+    // Use default retry config if not provided
+    const config: Required<RetryConfig> = {
+      maxRetries: retryConfig?.maxRetries ?? this.defaultRetryConfig.maxRetries!,
+      initialDelayMs: retryConfig?.initialDelayMs ?? this.defaultRetryConfig.initialDelayMs!,
+      maxDelayMs: retryConfig?.maxDelayMs ?? this.defaultRetryConfig.maxDelayMs!,
+      backoffMultiplier: retryConfig?.backoffMultiplier ?? this.defaultRetryConfig.backoffMultiplier!,
+      retryableStatusCodes: retryConfig?.retryableStatusCodes ?? this.defaultRetryConfig.retryableStatusCodes!
+    };
+
+    let lastError: Error | null = null;
+    
+    for (let attempt = 0; attempt <= config.maxRetries; attempt++) {
+      try {
+        // Make the request
+        const data = await this.makeRequest<T>(requestId, url, options);
+        
+        // Cache the result if requested
+        if (cacheDurationMs > 0) {
+          this.setCached<T>(requestId, data, cacheDurationMs);
+        }
+        
+        return data;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        
+        // Check if we should retry
+        const shouldRetry = this.shouldRetryError(lastError, config.retryableStatusCodes);
+        
+        if (!shouldRetry || attempt >= config.maxRetries) {
+          // No more retries, throw the error
+          console.error(`[NetworkManager] Request ${requestId} failed after ${attempt + 1} attempts: ${lastError.message}`);
+          throw lastError;
+        }
+        
+        // Calculate delay with exponential backoff
+        const delayMs = Math.min(
+          config.initialDelayMs * Math.pow(config.backoffMultiplier, attempt),
+          config.maxDelayMs
+        );
+        
+        console.warn(`[NetworkManager] Request ${requestId} failed (attempt ${attempt + 1}/${config.maxRetries + 1}), retrying in ${delayMs}ms: ${lastError.message}`);
+        
+        // Wait before retrying
+        await this.sleep(delayMs);
+      }
+    }
+    
+    // Should never reach here, but satisfy TypeScript
+    throw lastError!;
+  }
+
+  /**
+   * Make a single HTTP request without retry logic
+   * @private
+   */
+  private async makeRequest<T>(
+    requestId: string,
+    url: string,
+    options: NetworkRequestOptions
+  ): Promise<T> {
     // Cancel any existing request with the same ID
     this.cancelRequest(requestId);
 
@@ -88,27 +175,48 @@ export class NetworkManager {
       const response = await httpRequest.request(url, requestOptions);
 
       // Check response status
-      if (response.responseCode !== 200) {
-        throw new Error(`HTTP ${response.responseCode}: ${response.result}`);
+      if (response.responseCode !== 200 && response.responseCode !== 201) {
+        const error = new Error(`HTTP ${response.responseCode}: ${response.result}`);
+        (error as Error & { statusCode?: number }).statusCode = response.responseCode;
+        throw error;
       }
 
-      const data = response.result as T;
-
-      // Cache the result if requested
-      if (cacheDurationMs > 0) {
-        this.setCached<T>(requestId, data, cacheDurationMs);
-      }
-
-      return data;
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      console.error(`[NetworkManager] Request ${requestId} failed: ${errorMsg}`);
-      throw error;
+      return response.result as T;
     } finally {
       // Clean up
       this.activeRequests.delete(requestId);
       httpRequest.destroy();
     }
+  }
+
+  /**
+   * Determine if an error should trigger a retry
+   * @private
+   */
+  private shouldRetryError(error: Error, retryableStatusCodes: number[]): boolean {
+    // Check if error has a status code
+    const statusCode = (error as Error & { statusCode?: number }).statusCode;
+    
+    if (statusCode !== undefined) {
+      // Retry on specific HTTP status codes
+      return retryableStatusCodes.includes(statusCode);
+    }
+    
+    // Retry on network errors (timeout, connection refused, etc.)
+    const errorMsg = error.message.toLowerCase();
+    return errorMsg.includes('timeout') ||
+           errorMsg.includes('network') ||
+           errorMsg.includes('connection') ||
+           errorMsg.includes('econnrefused') ||
+           errorMsg.includes('enotfound');
+  }
+
+  /**
+   * Sleep for specified milliseconds
+   * @private
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   /**
