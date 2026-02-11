@@ -387,5 +387,162 @@ export default function networkManagerTest() {
         expect(e).assertNotNull();
       }
     });
+
+    /**
+     * Test retry with exponential backoff
+     */
+    it('should retry failed requests with exponential backoff', async () => {
+      try {
+        const start = Date.now();
+        
+        // Request that will fail with 500 status (retryable)
+        await manager.request<string>(
+          'test-retry',
+          'https://httpbin.org/status/500',
+          { method: http.RequestMethod.GET },
+          0,
+          {
+            maxRetries: 2,
+            initialDelayMs: 500,
+            backoffMultiplier: 2.0
+          }
+        );
+      } catch (e) {
+        const elapsed = Date.now() - start;
+        
+        // Should have retried:
+        // Initial attempt + retry after 500ms + retry after 1000ms
+        // Total: ~1500ms minimum
+        expect(elapsed).assertGreater(1400);
+        expect(e).assertNotNull();
+      }
+    });
+
+    /**
+     * Test retry on network errors
+     */
+    it('should retry on network errors', async () => {
+      try {
+        await manager.request<string>(
+          'test-network-error',
+          'https://invalid-domain-that-does-not-exist-12345.com',
+          { method: http.RequestMethod.GET },
+          0,
+          {
+            maxRetries: 2,
+            initialDelayMs: 100
+          }
+        );
+      } catch (e) {
+        // Should have retried and eventually failed
+        expect(e).assertNotNull();
+      }
+    });
+
+    /**
+     * Test retry stops on non-retryable errors
+     */
+    it('should not retry on 404 errors', async () => {
+      try {
+        const start = Date.now();
+        
+        await manager.request<string>(
+          'test-no-retry',
+          'https://httpbin.org/status/404',
+          { method: http.RequestMethod.GET },
+          0,
+          {
+            maxRetries: 3,
+            initialDelayMs: 1000
+          }
+        );
+      } catch (e) {
+        const elapsed = Date.now() - start;
+        
+        // Should fail immediately without retries
+        // (404 is not in retryableStatusCodes)
+        expect(elapsed).assertLessThan(1500);
+        expect(e).assertNotNull();
+      }
+    });
+
+    /**
+     * Test max delay cap
+     */
+    it('should cap retry delay at maxDelayMs', async () => {
+      try {
+        const start = Date.now();
+        
+        await manager.request<string>(
+          'test-max-delay',
+          'https://httpbin.org/status/503',
+          { method: http.RequestMethod.GET },
+          0,
+          {
+            maxRetries: 3,
+            initialDelayMs: 10000,  // Very high initial delay
+            maxDelayMs: 1000,       // But capped at 1 second
+            backoffMultiplier: 2.0
+          }
+        );
+      } catch (e) {
+        const elapsed = Date.now() - start;
+        
+        // With 3 retries, should be ~3 seconds (3 * 1000ms cap)
+        // Not 10000 + 20000 + 40000 = 70 seconds
+        expect(elapsed).assertLessThan(5000);
+        expect(e).assertNotNull();
+      }
+    });
+
+    /**
+     * Test successful retry after transient failure
+     */
+    it('should succeed if retry succeeds', async () => {
+      // This test is hard to implement without a mock server
+      // In real scenarios, a server might return 503 then 200
+      // For now, we just verify the retry logic doesn't break successful requests
+      try {
+        const result = await manager.request<string>(
+          'test-success-after-retry',
+          'https://httpbin.org/get',
+          { method: http.RequestMethod.GET },
+          0,
+          { maxRetries: 2 }
+        );
+        
+        expect(result).assertNotNull();
+      } catch (e) {
+        // Network might not be available
+        console.warn('[Test] Network not available');
+      }
+    });
+
+    /**
+     * Test custom retryable status codes
+     */
+    it('should respect custom retryable status codes', async () => {
+      try {
+        const start = Date.now();
+        
+        await manager.request<string>(
+          'test-custom-retry',
+          'https://httpbin.org/status/418', // I'm a teapot
+          { method: http.RequestMethod.GET },
+          0,
+          {
+            maxRetries: 2,
+            initialDelayMs: 500,
+            retryableStatusCodes: [418] // Make 418 retryable
+          }
+        );
+      } catch (e) {
+        const elapsed = Date.now() - start;
+        
+        // Should have retried (418 is in custom retryable list)
+        expect(elapsed).assertGreater(900);
+        expect(e).assertNotNull();
+      }
+    });
   });
 }

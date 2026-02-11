@@ -861,6 +861,20 @@ struct Index {
         .margin({ top: DesignTokens.Spacing.MD })
         .stateEffect(true)
         .onClick(() => this.jumpToWordList())
+
+      Button('牌组学习 (SRS)')
+        .width('100%')
+        .height(52)
+        .fontSize(DesignTokens.Typography.FONT_SIZE_BASE)
+        .fontWeight(DesignTokens.Typography.FONT_WEIGHT_MEDIUM)
+        .fontColor('#2196F3')
+        .backgroundColor('#E3F2FD')
+        .borderRadius(DesignTokens.BorderRadius.XL)
+        .margin({ top: DesignTokens.Spacing.MD })
+        .stateEffect(true)
+        .onClick(() => {
+          router.pushUrl({ url: 'pages/deck/DeckPickerPage' });
+        })
     }
     .width('100%')
     .padding(DesignTokens.Spacing.XL)

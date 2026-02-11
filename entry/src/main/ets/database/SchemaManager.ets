@@ -10,7 +10,9 @@ import {
   TABLE_USER_NOTEBOOK_WORDS,
   TABLE_USER_WORD_BOOKS,
   TABLE_USER_WORD_BOOK_WORDS,
-  TABLE_SYSTEM_WORD_BOOK_WORDS
+  TABLE_SYSTEM_WORD_BOOK_WORDS,
+  TABLE_DECKS,
+  TABLE_CARDS
 } from './DBConstants';
 
 /**
@@ -139,6 +141,43 @@ const SQL_CREATE_USER_WORD_BOOK_WORDS = `
   )
 `;
 
+const SQL_CREATE_DECKS = `
+  CREATE TABLE IF NOT EXISTS ${TABLE_DECKS} (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'BOOK',
+    source_id INTEGER,
+    config TEXT NOT NULL DEFAULT '{}',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  )
+`;
+
+const SQL_CREATE_CARDS = `
+  CREATE TABLE IF NOT EXISTS ${TABLE_CARDS} (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    deck_id INTEGER NOT NULL,
+    word_id INTEGER,
+    front TEXT NOT NULL,
+    back TEXT NOT NULL,
+    context TEXT,
+    context_type TEXT NOT NULL DEFAULT 'NONE',
+    fsrs_state TEXT NOT NULL DEFAULT '{}',
+    due_date INTEGER NOT NULL,
+    interval REAL NOT NULL DEFAULT 0,
+    reps INTEGER NOT NULL DEFAULT 0,
+    lapses INTEGER NOT NULL DEFAULT 0,
+    queue INTEGER NOT NULL DEFAULT 0,
+    left INTEGER NOT NULL DEFAULT 0,
+    source_type TEXT NOT NULL DEFAULT 'MANUAL',
+    source_material_id INTEGER,
+    source_position INTEGER,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (deck_id) REFERENCES ${TABLE_DECKS}(id) ON DELETE CASCADE
+  )
+`;
+
 const SQL_CREATE_INDEX_WORD = `
   CREATE INDEX IF NOT EXISTS idx_words_word ON ${TABLE_WORDS}(word)
 `;
@@ -199,6 +238,22 @@ const SQL_CREATE_INDEX_SYSTEM_WORD_BOOK_WORDS_WORD = `
   CREATE INDEX IF NOT EXISTS idx_system_word_book_words_word ON ${TABLE_SYSTEM_WORD_BOOK_WORDS}(word)
 `;
 
+const SQL_CREATE_INDEX_CARDS_DECK = `
+  CREATE INDEX IF NOT EXISTS idx_cards_deck ON ${TABLE_CARDS}(deck_id)
+`;
+
+const SQL_CREATE_INDEX_CARDS_QUEUE = `
+  CREATE INDEX IF NOT EXISTS idx_cards_queue ON ${TABLE_CARDS}(queue)
+`;
+
+const SQL_CREATE_INDEX_CARDS_DUE = `
+  CREATE INDEX IF NOT EXISTS idx_cards_due ON ${TABLE_CARDS}(due_date)
+`;
+
+const SQL_CREATE_INDEX_CARDS_DECK_QUEUE_DUE = `
+  CREATE INDEX IF NOT EXISTS idx_cards_deck_queue_due ON ${TABLE_CARDS}(deck_id, queue, due_date)
+`;
+
 interface ColumnDef {
   name: string;
   type: string;
@@ -227,6 +282,8 @@ export class SchemaManager {
     await this.store.executeSql(SQL_CREATE_USER_NOTEBOOK_WORDS);
     await this.store.executeSql(SQL_CREATE_USER_WORD_BOOKS);
     await this.store.executeSql(SQL_CREATE_USER_WORD_BOOK_WORDS);
+    await this.store.executeSql(SQL_CREATE_DECKS);
+    await this.store.executeSql(SQL_CREATE_CARDS);
 
     await this.store.executeSql(SQL_CREATE_INDEX_WORD);
     await this.store.executeSql(SQL_CREATE_INDEX_STATUS);
@@ -243,6 +300,10 @@ export class SchemaManager {
     await this.store.executeSql(SQL_CREATE_INDEX_USER_WORD_BOOK_WORDS_WORD);
     await this.store.executeSql(SQL_CREATE_INDEX_SYSTEM_WORD_BOOK_WORDS_BOOK);
     await this.store.executeSql(SQL_CREATE_INDEX_SYSTEM_WORD_BOOK_WORDS_WORD);
+    await this.store.executeSql(SQL_CREATE_INDEX_CARDS_DECK);
+    await this.store.executeSql(SQL_CREATE_INDEX_CARDS_QUEUE);
+    await this.store.executeSql(SQL_CREATE_INDEX_CARDS_DUE);
+    await this.store.executeSql(SQL_CREATE_INDEX_CARDS_DECK_QUEUE_DUE);
   }
 
   async upgradeTables(): Promise<void> {

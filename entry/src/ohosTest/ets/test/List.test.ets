@@ -5,6 +5,8 @@ import sessionPlannerMicroContextTest from './SessionPlannerMicroContext.test';
 import storyGenerationPipelineTest from './StoryGenerationPipeline.test';
 import fsrsAlgorithmCacheTest from './FSRSAlgorithmCache.test';
 import networkManagerTest from './NetworkManager.test';
+import fsrsv5AlgorithmTest from './FSRSv5Algorithm.test';
+import learningStepsPolicyTest from './LearningStepsPolicy.test';
 
 export default function testsuite() {
   abilityTest();
@@ -14,4 +16,6 @@ export default function testsuite() {
   storyGenerationPipelineTest();
   fsrsAlgorithmCacheTest();
   networkManagerTest();
+  fsrsv5AlgorithmTest();
+  learningStepsPolicyTest();
 }
