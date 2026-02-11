@@ -68,6 +68,10 @@ export class ReviewResult {
  */
 export class FSRSAlgorithm {
   private static instance: FSRSAlgorithm | null = null;
+  
+  // Performance optimization: cache preview intervals
+  private intervalCache: Map<string, Map<Rating, number>> = new Map<string, Map<Rating, number>>();
+  private readonly MAX_CACHE_SIZE: number = 200;
 
   private constructor() {}
 
@@ -336,17 +340,42 @@ export class FSRSAlgorithm {
   /**
    * Preview intervals for all ratings
    * Returns map of rating -> interval in days
+   * Performance optimized with caching
    */
   previewIntervals(currentState: FSRSState, elapsedDays:  number): Map<Rating, number> {
+    // Generate cache key from state parameters
+    const cacheKey = `${currentState.stability.toFixed(2)}_${currentState.difficulty.toFixed(2)}_${currentState.reps}_${elapsedDays}`;
+    
+    // Check cache first
+    const cached = this.intervalCache.get(cacheKey);
+    if (cached !== undefined) {
+      return cached;
+    }
+    
+    // Calculate intervals
     const intervals = new Map<Rating, number>();
-
     const ratings:  Rating[] = [Rating.AGAIN, Rating.HARD, Rating.GOOD, Rating.EASY];
     for (const rating of ratings) {
       const result = this.review(currentState.clone(), rating, elapsedDays);
       intervals.set(rating, result.intervalDays);
     }
+    
+    // Store in cache with size limit
+    if (this.intervalCache.size >= this.MAX_CACHE_SIZE) {
+      // Remove oldest entry (first key)
+      const firstKey = this.intervalCache.keys().next().value;
+      this.intervalCache.delete(firstKey);
+    }
+    this.intervalCache.set(cacheKey, intervals);
 
     return intervals;
+  }
+  
+  /**
+   * Clear the interval cache (useful for testing or memory management)
+   */
+  clearCache(): void {
+    this.intervalCache.clear();
   }
 }
 
