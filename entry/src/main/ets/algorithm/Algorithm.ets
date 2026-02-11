@@ -456,7 +456,7 @@ export class FSRSAlgorithm {
     // Store in cache with size limit
     if (this.intervalCache.size >= this.MAX_CACHE_SIZE) {
       // Remove oldest entry (first key)
-      const firstKey = this.intervalCache.keys().next().value;
+      const firstKey: string = this.intervalCache.keys().next().value;
       this.intervalCache.delete(firstKey);
     }
     this.intervalCache.set(cacheKey, intervals);
