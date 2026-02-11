@@ -1,0 +1,140 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "构建 Debug 版本",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "hvigorw",
+      "runtimeArgs": [
+        "assembleDebug",
+        "--parallel"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "presentation": {
+        "group": "build",
+        "order": 1
+      }
+    },
+    {
+      "name": "构建 Release 版本",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "hvigorw",
+      "runtimeArgs": [
+        "assembleRelease",
+        "--parallel"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "presentation": {
+        "group": "build",
+        "order": 2
+      }
+    },
+    {
+      "name": "安装 HAP 到设备",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "hdc",
+      "runtimeArgs": [
+        "install",
+        "-r",
+        "${workspaceFolder}/entry/build/outputs/default/entry-default-unsigned.hap"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "presentation": {
+        "group": "deploy",
+        "order": 1
+      }
+    },
+    {
+      "name": "构建并安装 (Debug)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "hvigorw",
+      "runtimeArgs": [
+        "assembleDebug",
+        "--parallel"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "postDebugTask": "安装 HAP",
+      "presentation": {
+        "group": "deploy",
+        "order": 2
+      }
+    },
+    {
+      "name": "运行单元测试",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "hvigorw",
+      "runtimeArgs": [
+        "test",
+        "--parallel"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "presentation": {
+        "group": "test",
+        "order": 1
+      }
+    },
+    {
+      "name": "清理项目",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "hvigorw",
+      "runtimeArgs": [
+        "clean"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "presentation": {
+        "group": "maintenance",
+        "order": 1
+      }
+    },
+    {
+      "name": "同步依赖",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "hvigorw",
+      "runtimeArgs": [
+        "sync"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "presentation": {
+        "group": "maintenance",
+        "order": 2
+      }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "完整构建流程 (清理+构建+安装)",
+      "configurations": [
+        "清理项目",
+        "构建 Debug 版本",
+        "安装 HAP 到设备"
+      ],
+      "stopAll": true,
+      "preLaunchTask": "检查设备连接...",
+      "presentation": {
+        "group": "workflow",
+        "order": 1
+      }
+    }
+  ]
+}

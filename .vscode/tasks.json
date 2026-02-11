@@ -1,0 +1,157 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "构建 Debug",
+      "type": "shell",
+      "command": "hvigorw",
+      "args": [
+        "assembleDebug",
+        "--parallel"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "构建 Release",
+      "type": "shell",
+      "command": "hvigorw",
+      "args": [
+        "assembleRelease",
+        "--parallel"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "安装 HAP",
+      "type": "shell",
+      "command": "hdc",
+      "args": [
+        "install",
+        "-r",
+        "${workspaceFolder}/entry/build/outputs/default/entry-default-unsigned.hap"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": [],
+      "dependsOn": "构建 Debug"
+    },
+    {
+      "label": "清理项目",
+      "type": "shell",
+      "command": "hvigorw",
+      "args": [
+        "clean"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "同步依赖",
+      "type": "shell",
+      "command": "hvigorw",
+      "args": [
+        "sync"
+      ],
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "运行单元测试",
+      "type": "shell",
+      "command": "hvigorw",
+      "args": [
+        "test",
+        "--parallel"
+      ],
+      "group": "test",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "检查设备连接",
+      "type": "shell",
+      "command": "hdc",
+      "args": [
+        "list",
+        "targets"
+      ],
+      "group": "none",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "检查设备连接并提示",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-Command",
+        "Write-Host '检查设备连接...'; hdc list targets"
+      ],
+      "group": "none",
+      "presentation": {
+        "echo": true,
+        "reveal": "always",
+        "focus": false,
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "构建并安装 (顺序)",
+      "dependsOn": [
+        "构建 Debug",
+        "安装 HAP"
+      ],
+      "dependsOrder": "sequence",
+      "group": {
+        "kind": "build",
+        "isDefault": false
+      },
+      "problemMatcher": []
+    }
+  ]
+}

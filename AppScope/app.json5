@@ -1,7 +1,7 @@
 {
   "app": {
-    "bundleName": "com.yourname.myapplication",
-    "vendor": "example",
+    "bundleName": "io.qzz.weixu",
+    "vendor": "微语境团队",
     "versionCode": 1000000,
     "versionName": "1.0.0",
     "icon": "$media:layered_image",
