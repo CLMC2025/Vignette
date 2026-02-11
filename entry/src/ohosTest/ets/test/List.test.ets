@@ -3,6 +3,8 @@ import routeParamNormalizerTest from './RouteParamNormalizer.test';
 import templateManagerPackTest from './TemplateManagerPack.test';
 import sessionPlannerMicroContextTest from './SessionPlannerMicroContext.test';
 import storyGenerationPipelineTest from './StoryGenerationPipeline.test';
+import fsrsAlgorithmCacheTest from './FSRSAlgorithmCache.test';
+import networkManagerTest from './NetworkManager.test';
 
 export default function testsuite() {
   abilityTest();
@@ -10,4 +12,6 @@ export default function testsuite() {
   templateManagerPackTest();
   sessionPlannerMicroContextTest();
   storyGenerationPipelineTest();
+  fsrsAlgorithmCacheTest();
+  networkManagerTest();
 }
