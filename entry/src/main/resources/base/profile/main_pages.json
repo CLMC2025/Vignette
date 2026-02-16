@@ -1,0 +1,18 @@
+{
+  "src": [
+    "pages/Index",
+    "pages/WordBookManagerPage",
+    "pages/WordDetailPage",
+    "pages/ReadPage",
+    "pages/SettingsPage",
+    "pages/ImportPage",
+    "pages/OnboardingPage",
+    "pages/TextsPage",
+    "pages/TextEditPage",
+    "pages/TextReaderPage",
+    "pages/WordList",
+    "pages/WordListPage",
+    "pages/NotebookPage",
+    "pages/LoggerPage"
+  ]
+}

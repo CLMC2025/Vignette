@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "baseUrl": ".",
+    "allowJs": true,
+    "checkJs": false,
+    "skipLibCheck": true
+  },
+  "include": [
+    "entry/src/**/*.ets",
+    "entry/src/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "**/build/**",
+    "**/.hvigor/**"
+  ]
+}

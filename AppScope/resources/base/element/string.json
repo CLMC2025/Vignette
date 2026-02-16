@@ -1,0 +1,48 @@
+{
+  "string": [
+    {
+      "name": "app_name",
+      "value": "微语单词"
+    },
+    {
+      "name": "about_title",
+      "value": "关于"
+    },
+    {
+      "name": "about_version",
+      "value": "微语单词 v1.0.0"
+    },
+    {
+      "name": "about_slogan",
+      "value": "让单词学习更有趣"
+    },
+    {
+      "name": "about_privacy",
+      "value": "隐私政策"
+    },
+    {
+      "name": "about_license",
+      "value": "开源许可"
+    },
+    {
+      "name": "about_project",
+      "value": "项目地址：https://github.com/CLMC2025/Vignette"
+    },
+    {
+      "name": "about_email",
+      "value": "反馈邮箱：c_k1@foxmail.com"
+    },
+    {
+      "name": "about_qq",
+      "value": "QQ反馈群：1077476965"
+    },
+    {
+      "name": "license_title",
+      "value": "开源许可"
+    },
+    {
+      "name": "license_close",
+      "value": "关闭"
+    }
+  ]
+}

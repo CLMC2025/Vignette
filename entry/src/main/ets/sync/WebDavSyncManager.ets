@@ -1,0 +1,814 @@
+// =====================================================
+// WebDavSyncManager.ets - WebDAV-only sync & evolution pipeline
+//
+// Features:
+// - Backup/restore: encrypted export/import of app data
+// - Review events sync: encrypted JSONL upload/download
+// - Model sync: encrypted policy upload/download
+// - Conflict policy: Last-Modified/ETag check + snapshot backup
+//
+// This module is designed for a "no server" deployment.
+// =====================================================
+
+import { DataSyncManager } from './DataSyncManager';
+import { DBManager } from '../database/DBManager';
+import { WebDavClient } from './webdav/WebDavClient';
+import type { IWebDavBackend } from './webdav/IWebDavBackend';
+import { WebDavStateStore } from '../utils/WebDavStateStore';
+import type common from '@ohos.app.ability.common';
+import { 
+  WebDavSettings, WebDavManifest, WebDavSyncResult, WebDavSyncStatus, 
+  WebDavBackupPlainResult, safeTrim, normalizeRoot, generateDeviceId,
+  BACKUP_FILE_NAME, EVENTS_FILE_NAME, TEMPLATE_PACK_FILE_NAME,
+  WORDS_DELTA_FILE_NAME, DEFINITIONS_FILE_NAME
+} from './webdav/WebDavCommon';
+import { WebDavBackupManager } from './webdav/WebDavBackupManager';
+import { WebDavEventsSync } from './webdav/WebDavEventsSync';
+import { WebDavModelSync } from './webdav/WebDavModelSync';
+import { WebDavIncrementalSync } from './webdav/WebDavIncrementalSync';
+
+export { 
+  WebDavSyncStatus, 
+  WebDavSettingsJSON, 
+  WebDavManifestJSON, 
+  ReviewEventJSON, 
+  WebDavSettings, 
+  WebDavManifest, 
+  WebDavSyncResult, 
+  WebDavBackupPlainResult 
+} from './webdav/WebDavCommon';
+
+export class WebDavSyncManager {
+  private static instance: WebDavSyncManager | null = null;
+
+  private status: WebDavSyncStatus = WebDavSyncStatus.IDLE;
+
+  private settings: WebDavSettings = new WebDavSettings();
+  private manifest: WebDavManifest = new WebDavManifest(generateDeviceId());
+  private lastSnapshotJson: string = '';
+  private storeReady: boolean = false;
+  private store: WebDavStateStore = WebDavStateStore.getInstance();
+  private remoteLayoutKey: string = '';
+  private remoteLayoutBase: string = '/';
+  private remoteLayoutPrefix: string = '';
+
+  private syncManager: DataSyncManager = DataSyncManager.getInstance();
+  private db: DBManager = DBManager.getInstance();
+
+  private backupManager: WebDavBackupManager;
+  private eventsSync: WebDavEventsSync;
+  private modelSync: WebDavModelSync;
+  private incrementalSync: WebDavIncrementalSync;
+
+  private constructor() {
+    this.backupManager = new WebDavBackupManager(this.syncManager, this.store);
+    this.eventsSync = new WebDavEventsSync(this.db, this.store);
+    this.modelSync = new WebDavModelSync(this.store);
+    this.incrementalSync = new WebDavIncrementalSync(this.syncManager, this.store);
+  }
+
+  static getInstance(): WebDavSyncManager {
+    if (WebDavSyncManager.instance === null) {
+      WebDavSyncManager.instance = new WebDavSyncManager();
+    }
+    return WebDavSyncManager.instance;
+  }
+
+  getStatus(): WebDavSyncStatus {
+    return this.status;
+  }
+
+  getSettings(): WebDavSettings {
+    return this.settings;
+  }
+
+  async setSettings(settings: WebDavSettings): Promise<boolean> {
+    this.settings = settings;
+    this.settings.remoteRoot = normalizeRoot(this.settings.remoteRoot);
+    this.remoteLayoutKey = '';
+    
+    if (!this.storeReady) {
+      console.warn('[WebDavSyncManager] setSettings: store not ready, settings cached but not saved');
+    }
+    
+    const saved = this.storeReady ? await this.store.saveSettingsJson(this.settings.toJSON()) : false;
+    return saved || this.storeReady === false;
+  }
+
+  getManifest(): WebDavManifest {
+    return this.manifest;
+  }
+
+  async initialize(context: common.UIAbilityContext): Promise<boolean> {
+    if (this.storeReady) {
+      return true;
+    }
+    this.store.injectContext(context);
+    const ok = await this.store.initialize();
+    if (!ok) {
+      return false;
+    }
+
+    const settingsJson = await this.store.getSettingsJson();
+    if (settingsJson.length > 0) {
+      this.settings = WebDavSettings.fromJSON(settingsJson);
+      this.settings.remoteRoot = normalizeRoot(this.settings.remoteRoot);
+    }
+
+    const manifestJson = await this.store.getManifestJson();
+    if (manifestJson.length > 0) {
+      this.manifest = WebDavManifest.fromJSON(manifestJson, this.manifest.deviceId);
+    } else {
+      await this.store.saveManifestJson(this.manifest.toJSON());
+    }
+
+    const snapshotJson = await this.store.getSnapshotJson();
+    if (snapshotJson.length > 0) {
+      this.lastSnapshotJson = snapshotJson;
+    }
+
+    this.storeReady = true;
+    return true;
+  }
+
+  private requireConfigured(): WebDavSyncResult | null {
+    if (safeTrim(this.settings.endpoint).length === 0) {
+      return WebDavSyncResult.fail('未配置 WebDAV 地址', 'WebDAV endpoint is empty');
+    }
+    if (safeTrim(this.settings.username).length === 0 || safeTrim(this.settings.password).length === 0) {
+      return WebDavSyncResult.fail('未配置 WebDAV 账号', 'WebDAV username/password is empty');
+    }
+    if (safeTrim(this.settings.syncPassword).length < 4) {
+      return WebDavSyncResult.fail('同步密码过短', 'Sync password is too short');
+    }
+    return null;
+  }
+
+  private createClient(): IWebDavBackend {
+    return new WebDavClient(
+      this.settings.endpoint,
+      this.settings.username,
+      this.settings.password
+    );
+  }
+
+  private rootPath(...parts: string[]): string {
+    const base = normalizeRoot(this.settings.remoteRoot);
+    let p = base;
+    for (const part of parts) {
+      const clean = part.replace(/^\/+|\/+$/g, '');
+      if (clean.length > 0) {
+        p = `${p}/${clean}`;
+      }
+    }
+    return p;
+  }
+
+  private sanitizePrefix(remoteRoot: string): string {
+    const raw = remoteRoot.replace(/^\/+/, '').replace(/\/+$/g, '');
+    const replaced = raw.replace(/\/+/g, '_').replace(/[^0-9a-zA-Z_-]+/g, '_');
+    const trimmed = replaced.replace(/^_+|_+$/g, '');
+    const out = trimmed.length > 0 ? trimmed : 'weiyu_vignette';
+    return out.length > 64 ? out.slice(0, 64) : out;
+  }
+
+  private composeRemotePath(base: string, prefix: string, fileName: string): string {
+    const b = base.replace(/\/+$/g, '') || '/';
+    const name = prefix.length > 0 ? `${prefix}${fileName}` : fileName;
+    if (b === '/') {
+      return `/${name}`;
+    }
+    return `${b}/${name}`;
+  }
+
+  private backupFilePath(): string {
+    return this.composeRemotePath(this.remoteLayoutBase, this.remoteLayoutPrefix, BACKUP_FILE_NAME);
+  }
+
+  private legacyBackupFilePath(): string {
+    return this.rootPath('data', BACKUP_FILE_NAME);
+  }
+
+  private eventsFilePath(): string {
+    return this.composeRemotePath(this.remoteLayoutBase, this.remoteLayoutPrefix, EVENTS_FILE_NAME);
+  }
+
+  private templatePackFilePath(): string {
+    return this.composeRemotePath(this.remoteLayoutBase, this.remoteLayoutPrefix, TEMPLATE_PACK_FILE_NAME);
+  }
+
+  private wordsDeltaFilePath(): string {
+    return this.composeRemotePath(this.remoteLayoutBase, this.remoteLayoutPrefix, WORDS_DELTA_FILE_NAME);
+  }
+
+  private definitionsFilePath(): string {
+    return this.composeRemotePath(this.remoteLayoutBase, this.remoteLayoutPrefix, DEFINITIONS_FILE_NAME);
+  }
+
+  private isCollectionReachable(statusCode: number): boolean {
+    if (statusCode >= 200 && statusCode < 400) {
+      return true;
+    }
+    return statusCode === 405;
+  }
+
+  private async probeRootWritable(client: IWebDavBackend, prefix: string): Promise<WebDavSyncResult | null> {
+    const probeName = `.probe_${Date.now()}.txt`;
+    const probePath = this.composeRemotePath('/', prefix, probeName);
+    const putRes = await client.put(probePath, 'probe', 'text/plain');
+    if (putRes.statusCode >= 200 && putRes.statusCode < 300) {
+      await client.delete(probePath);
+      return null;
+    }
+    if (putRes.statusCode === 401 || putRes.statusCode === 403) {
+      const msg = putRes.statusCode === 401 ? '鉴权失败（可能需要应用专用密码）' : '根目录权限不足，无法使用根目录前缀模式';
+      return WebDavSyncResult.fail('WebDAV 连接失败', `STEP endpoint PUT ${putRes.statusCode}: ${msg}；请在 WebDAV 端创建 ${this.settings.remoteRoot} 或填写一个已存在且有权限的远端目录`);
+    }
+    if (putRes.statusCode === 409) {
+      return WebDavSyncResult.fail('WebDAV 连接失败', `STEP endpoint PUT 409: 路径不存在（AncestorNotFound）；请检查 WebDAV 地址是否指向可用的根目录（例如以 /dav/ 结尾），或先在 WebDAV 端创建 ${this.settings.remoteRoot}`);
+    }
+    return WebDavSyncResult.fail('WebDAV 连接失败', `STEP endpoint PUT ${putRes.statusCode}: ${putRes.body}`);
+  }
+
+  private async probeCollectionWritable(client: IWebDavBackend, base: string): Promise<WebDavSyncResult | null> {
+    const probeName = `.probe_${Date.now()}.txt`;
+    const probePath = this.composeRemotePath(base, '', probeName);
+    const putRes = await client.put(probePath, 'probe', 'text/plain');
+    if (putRes.statusCode >= 200 && putRes.statusCode < 300) {
+      await client.delete(probePath);
+      return null;
+    }
+    if (putRes.statusCode === 401 || putRes.statusCode === 403) {
+      const msg = putRes.statusCode === 401 ? '鉴权失败（可能需要应用专用密码）' : '权限不足（目录可能不可写）';
+      return WebDavSyncResult.fail('WebDAV 连接失败', `STEP remoteRoot PUT ${putRes.statusCode}: ${msg}`);
+    }
+    if (putRes.statusCode === 404) {
+      return WebDavSyncResult.fail('WebDAV 连接失败', `STEP remoteRoot PUT 404: 远端目录不存在或不可用，请先创建 ${this.settings.remoteRoot}`);
+    }
+    if (putRes.statusCode === 409) {
+      return WebDavSyncResult.fail('WebDAV 连接失败', `STEP remoteRoot PUT 409: 路径不存在（AncestorNotFound）；请先创建 ${this.settings.remoteRoot}`);
+    }
+    return WebDavSyncResult.fail('WebDAV 连接失败', `STEP remoteRoot PUT ${putRes.statusCode}: ${putRes.body}`);
+  }
+
+  private async preflightRemoteRoot(client: IWebDavBackend): Promise<WebDavSyncResult | null> {
+    const key = `${safeTrim(this.settings.endpoint)}|${safeTrim(this.settings.remoteRoot)}`;
+    if (this.remoteLayoutKey === key) {
+      return null;
+    }
+
+    const remoteRoot = normalizeRoot(this.settings.remoteRoot);
+    if (remoteRoot === '/') {
+      this.remoteLayoutKey = key;
+      this.remoteLayoutBase = '/';
+      this.remoteLayoutPrefix = '';
+      return null;
+    }
+
+    const rootHead = await client.head(remoteRoot);
+    if (this.isCollectionReachable(rootHead.statusCode)) {
+      this.remoteLayoutKey = key;
+      this.remoteLayoutBase = remoteRoot;
+      this.remoteLayoutPrefix = '';
+      return null;
+    }
+
+    const probeRemoteRoot = await this.probeCollectionWritable(client, remoteRoot);
+    if (probeRemoteRoot === null) {
+      this.remoteLayoutKey = key;
+      this.remoteLayoutBase = remoteRoot;
+      this.remoteLayoutPrefix = '';
+      return null;
+    }
+
+    if (this.settings.requireRemoteRootExists) {
+      return probeRemoteRoot;
+    }
+
+    const prefix = `${this.sanitizePrefix(remoteRoot)}__`;
+    const probe = await this.probeRootWritable(client, prefix);
+    if (probe !== null) {
+      return probe;
+    }
+    this.remoteLayoutKey = key;
+    this.remoteLayoutBase = '/';
+    this.remoteLayoutPrefix = prefix;
+    return null;
+  }
+
+  async testConnection(): Promise<WebDavSyncResult> {
+    const missing = this.requireConfigured();
+    if (missing !== null) return missing;
+
+    this.status = WebDavSyncStatus.TESTING;
+    try {
+      const client = this.createClient();
+      const remoteRoot = normalizeRoot(this.settings.remoteRoot);
+      if (remoteRoot !== '/') {
+        const rootHead = await client.head(remoteRoot);
+        if (this.isCollectionReachable(rootHead.statusCode)) {
+          this.remoteLayoutKey = `${safeTrim(this.settings.endpoint)}|${safeTrim(this.settings.remoteRoot)}`;
+          this.remoteLayoutBase = remoteRoot;
+          this.remoteLayoutPrefix = '';
+          this.status = WebDavSyncStatus.IDLE;
+          return WebDavSyncResult.ok('WebDAV 连接成功');
+        }
+
+        const probeRemoteRoot = await this.probeCollectionWritable(client, remoteRoot);
+        if (probeRemoteRoot === null) {
+          this.remoteLayoutKey = `${safeTrim(this.settings.endpoint)}|${safeTrim(this.settings.remoteRoot)}`;
+          this.remoteLayoutBase = remoteRoot;
+          this.remoteLayoutPrefix = '';
+          this.status = WebDavSyncStatus.IDLE;
+          return WebDavSyncResult.ok('WebDAV 连接成功');
+        }
+
+        if (this.settings.requireRemoteRootExists) {
+          this.status = WebDavSyncStatus.ERROR;
+          return probeRemoteRoot;
+        }
+
+        const prefix = `${this.sanitizePrefix(remoteRoot)}__`;
+        const probe = await this.probeRootWritable(client, prefix);
+        if (probe !== null) {
+          this.status = WebDavSyncStatus.ERROR;
+          return probe;
+        }
+        this.remoteLayoutKey = `${safeTrim(this.settings.endpoint)}|${safeTrim(this.settings.remoteRoot)}`;
+        this.remoteLayoutBase = '/';
+        this.remoteLayoutPrefix = prefix;
+        this.status = WebDavSyncStatus.IDLE;
+        return WebDavSyncResult.ok('WebDAV 连接成功（已使用根目录前缀模式）');
+      }
+
+      const probe = await this.probeRootWritable(client, '');
+      if (probe !== null) {
+        this.status = WebDavSyncStatus.ERROR;
+        return probe;
+      }
+      this.remoteLayoutKey = `${safeTrim(this.settings.endpoint)}|${safeTrim(this.settings.remoteRoot)}`;
+      this.remoteLayoutBase = '/';
+      this.remoteLayoutPrefix = '';
+      this.status = WebDavSyncStatus.IDLE;
+      return WebDavSyncResult.ok('WebDAV 连接成功');
+    } catch (e) {
+      this.status = WebDavSyncStatus.ERROR;
+      const msg = e instanceof Error ? e.message : String(e);
+      return WebDavSyncResult.fail('WebDAV 连接失败', msg);
+    }
+  }
+
+  // ==================== Backup / Restore ====================
+
+  async backupToCloud(): Promise<WebDavSyncResult> {
+    const missing = this.requireConfigured();
+    if (missing !== null) return missing;
+
+    this.status = WebDavSyncStatus.SYNCING;
+    try {
+      const client = this.createClient();
+      const preflight = await this.preflightRemoteRoot(client);
+      if (preflight !== null) {
+        this.status = WebDavSyncStatus.ERROR;
+        return preflight;
+      }
+
+      const result = await this.backupManager.backupToCloud(
+        client,
+        this.settings,
+        this.manifest,
+        this.backupFilePath()
+      );
+      this.status = result.success ? WebDavSyncStatus.IDLE : WebDavSyncStatus.ERROR;
+      return result;
+    } catch (e) {
+      this.status = WebDavSyncStatus.ERROR;
+      const msg = e instanceof Error ? e.message : String(e);
+      return WebDavSyncResult.fail('备份失败', msg);
+    }
+  }
+
+  async downloadBackupPlain(force: boolean = false): Promise<WebDavBackupPlainResult> {
+    const missing = this.requireConfigured();
+    if (missing !== null) return new WebDavBackupPlainResult(missing, '');
+
+    this.status = WebDavSyncStatus.RESTORING;
+    try {
+      const client = this.createClient();
+      const preflight = await this.preflightRemoteRoot(client);
+      if (preflight !== null) {
+        this.status = WebDavSyncStatus.ERROR;
+        return new WebDavBackupPlainResult(preflight, '');
+      }
+
+      const result = await this.backupManager.downloadBackupPlain(
+        client,
+        this.settings,
+        this.manifest,
+        this.backupFilePath(),
+        this.legacyBackupFilePath(),
+        force
+      );
+      
+      this.status = result.result.success ? WebDavSyncStatus.IDLE : WebDavSyncStatus.ERROR;
+      return result;
+    } catch (e) {
+      this.status = WebDavSyncStatus.ERROR;
+      const msg = e instanceof Error ? e.message : String(e);
+      return new WebDavBackupPlainResult(WebDavSyncResult.fail('下载失败', msg), '');
+    }
+  }
+
+  async importPlainBackup(plain: string): Promise<WebDavSyncResult> {
+    this.status = WebDavSyncStatus.RESTORING;
+    const result = await this.backupManager.importPlainBackup(plain);
+    this.status = result.success ? WebDavSyncStatus.IDLE : WebDavSyncStatus.ERROR;
+    return result;
+  }
+
+  async restoreFromCloud(force: boolean = false): Promise<WebDavSyncResult> {
+    const missing = this.requireConfigured();
+    if (missing !== null) return missing;
+
+    this.status = WebDavSyncStatus.RESTORING;
+    try {
+      const client = this.createClient();
+      const preflight = await this.preflightRemoteRoot(client);
+      if (preflight !== null) {
+        this.status = WebDavSyncStatus.ERROR;
+        return preflight;
+      }
+
+      const result = await this.backupManager.restoreFromCloud(
+        client,
+        this.settings,
+        this.manifest,
+        this.backupFilePath(),
+        this.legacyBackupFilePath(),
+        force
+      );
+      this.status = result.success ? WebDavSyncStatus.IDLE : WebDavSyncStatus.ERROR;
+      return result;
+    } catch (e) {
+      this.status = WebDavSyncStatus.ERROR;
+      const msg = e instanceof Error ? e.message : String(e);
+      return WebDavSyncResult.fail('恢复失败', msg);
+    }
+  }
+
+  getLastSnapshot(): string {
+    return this.lastSnapshotJson;
+  }
+
+  // ==================== Review Events Sync ====================
+
+  async uploadLocalReviewEvents(): Promise<WebDavSyncResult> {
+    const missing = this.requireConfigured();
+    if (missing !== null) return missing;
+
+    this.status = WebDavSyncStatus.SYNCING;
+    try {
+      const client = this.createClient();
+      const preflight = await this.preflightRemoteRoot(client);
+      if (preflight !== null) {
+        this.status = WebDavSyncStatus.ERROR;
+        return preflight;
+      }
+
+      const result = await this.eventsSync.uploadLocalReviewEvents(
+        client,
+        this.settings,
+        this.manifest,
+        this.eventsFilePath()
+      );
+      this.status = result.success ? WebDavSyncStatus.IDLE : WebDavSyncStatus.ERROR;
+      return result;
+    } catch (e) {
+      this.status = WebDavSyncStatus.ERROR;
+      const msg = e instanceof Error ? e.message : String(e);
+      return WebDavSyncResult.fail('上传复习记录失败', msg);
+    }
+  }
+
+  /**
+   * Backward compatible alias for UI.
+   */
+  async uploadReviewEvents(): Promise<WebDavSyncResult> {
+    return this.uploadLocalReviewEvents();
+  }
+
+  async downloadAndMergeRemoteEvents(): Promise<WebDavSyncResult> {
+    const missing = this.requireConfigured();
+    if (missing !== null) return missing;
+
+    this.status = WebDavSyncStatus.SYNCING;
+    try {
+      const client = this.createClient();
+      const preflight = await this.preflightRemoteRoot(client);
+      if (preflight !== null) {
+        this.status = WebDavSyncStatus.ERROR;
+        return preflight;
+      }
+
+      const result = await this.eventsSync.downloadAndMergeRemoteEvents(
+        client,
+        this.settings,
+        this.manifest,
+        this.eventsFilePath()
+      );
+      this.status = result.success ? WebDavSyncStatus.IDLE : WebDavSyncStatus.ERROR;
+      return result;
+    } catch (e) {
+      this.status = WebDavSyncStatus.ERROR;
+      const msg = e instanceof Error ? e.message : String(e);
+      return WebDavSyncResult.fail('拉取复习记录失败', msg);
+    }
+  }
+
+  // ==================== Offline Template Pack ====================
+
+  async downloadTemplatePack(): Promise<WebDavSyncResult> {
+    const missing = this.requireConfigured();
+    if (missing !== null) return missing;
+
+    this.status = WebDavSyncStatus.SYNCING;
+    try {
+      const client = this.createClient();
+      const preflight = await this.preflightRemoteRoot(client);
+      if (preflight !== null) {
+        this.status = WebDavSyncStatus.ERROR;
+        return preflight;
+      }
+
+      const result = await this.modelSync.downloadTemplatePack(
+        client,
+        this.settings,
+        this.manifest,
+        this.templatePackFilePath()
+      );
+      this.status = result.success ? WebDavSyncStatus.IDLE : WebDavSyncStatus.ERROR;
+      return result;
+    } catch (e) {
+      this.status = WebDavSyncStatus.ERROR;
+      const msg = e instanceof Error ? e.message : String(e);
+      return WebDavSyncResult.fail('下载离线模板包失败', msg);
+    }
+  }
+
+  async uploadTemplatePack(): Promise<WebDavSyncResult> {
+    const missing = this.requireConfigured();
+    if (missing !== null) return missing;
+
+    this.status = WebDavSyncStatus.SYNCING;
+    try {
+      const client = this.createClient();
+      const preflight = await this.preflightRemoteRoot(client);
+      if (preflight !== null) {
+        this.status = WebDavSyncStatus.ERROR;
+        return preflight;
+      }
+
+      const result = await this.modelSync.uploadTemplatePack(
+        client,
+        this.settings,
+        this.manifest,
+        this.templatePackFilePath()
+      );
+      this.status = result.success ? WebDavSyncStatus.IDLE : WebDavSyncStatus.ERROR;
+      return result;
+    } catch (e) {
+      this.status = WebDavSyncStatus.ERROR;
+      const msg = e instanceof Error ? e.message : String(e);
+      return WebDavSyncResult.fail('上传离线模板包失败', msg);
+    }
+  }
+
+  // ==================== Incremental Sync ====================
+
+  async syncIncremental(): Promise<WebDavSyncResult> {
+    const missing = this.requireConfigured();
+    if (missing !== null) return missing;
+
+    this.status = WebDavSyncStatus.SYNCING;
+    let currentStep: string = '初始化';
+    try {
+      const client = this.createClient();
+      const preflight = await this.preflightRemoteRoot(client);
+      if (preflight !== null) {
+        this.status = WebDavSyncStatus.ERROR;
+        return preflight;
+      }
+
+      currentStep = '单词下载';
+      const downloadResult = await this.withTimeout(
+        this.incrementalSync.downloadAndMergeWordsDelta(
+          client,
+          this.settings,
+          this.manifest,
+          this.wordsDeltaFilePath()
+        ),
+        60000,
+        '下载单词增量超时'
+      );
+      if (!downloadResult.success) {
+        this.status = WebDavSyncStatus.ERROR;
+        return this.buildIncrementalStepFailure('单词下载', downloadResult);
+      }
+
+      currentStep = '单词上传';
+      const uploadResult = await this.withTimeout(
+        this.incrementalSync.uploadWordsDelta(
+          client,
+          this.settings,
+          this.manifest,
+          this.wordsDeltaFilePath()
+        ),
+        60000,
+        '上传单词增量超时'
+      );
+      if (!uploadResult.success) {
+        this.status = WebDavSyncStatus.ERROR;
+        return this.buildIncrementalStepFailure('单词上传', uploadResult);
+      }
+
+      currentStep = '事件下载';
+      const eventsDownloadResult = await this.withTimeout(
+        this.eventsSync.downloadAndMergeRemoteEvents(
+          client,
+          this.settings,
+          this.manifest,
+          this.eventsFilePath()
+        ),
+        60000,
+        '下载复习记录超时'
+      );
+      if (!eventsDownloadResult.success) {
+        this.status = WebDavSyncStatus.ERROR;
+        return this.buildIncrementalStepFailure('事件下载', eventsDownloadResult);
+      }
+
+      currentStep = '事件上传';
+      const eventsUploadResult = await this.withTimeout(
+        this.eventsSync.uploadLocalReviewEvents(
+          client,
+          this.settings,
+          this.manifest,
+          this.eventsFilePath()
+        ),
+        60000,
+        '上传复习记录超时'
+      );
+      if (!eventsUploadResult.success) {
+        this.status = WebDavSyncStatus.ERROR;
+        return this.buildIncrementalStepFailure('事件上传', eventsUploadResult);
+      }
+
+      this.status = WebDavSyncStatus.IDLE;
+
+      const parts: string[] = [];
+      parts.push(`单词下载：${downloadResult.message}`);
+      parts.push(`单词上传：${uploadResult.message}`);
+      parts.push(`事件下载：${eventsDownloadResult.message}`);
+      parts.push(`事件上传：${eventsUploadResult.message}`);
+
+      return WebDavSyncResult.ok(parts.length > 0 ? parts.join('；') : '同步完成，无新数据');
+    } catch (e) {
+      this.status = WebDavSyncStatus.ERROR;
+      const msg = e instanceof Error ? e.message : String(e);
+      return WebDavSyncResult.fail('增量同步失败', `STEP ${currentStep}: ${msg}`);
+    }
+  }
+
+  private buildIncrementalStepFailure(step: string, result: WebDavSyncResult): WebDavSyncResult {
+    const detail = result.detail.length > 0 ? result.detail : result.message;
+    return WebDavSyncResult.fail(`增量同步失败（${step}）`, `STEP ${step}: ${detail}`);
+  }
+
+  private async withTimeout<T>(promise: Promise<T>, ms: number, errorMsg: string): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(errorMsg));
+      }, ms);
+      promise
+        .then((result: T) => {
+          clearTimeout(timer);
+          resolve(result);
+        })
+        .catch((err: Error) => {
+          clearTimeout(timer);
+          reject(err);
+        });
+    });
+  }
+
+  async uploadWordsDelta(): Promise<WebDavSyncResult> {
+    const missing = this.requireConfigured();
+    if (missing !== null) return missing;
+
+    this.status = WebDavSyncStatus.SYNCING;
+    try {
+      const client = this.createClient();
+      const preflight = await this.preflightRemoteRoot(client);
+      if (preflight !== null) {
+        this.status = WebDavSyncStatus.ERROR;
+        return preflight;
+      }
+
+      const result = await this.incrementalSync.uploadWordsDelta(
+        client,
+        this.settings,
+        this.manifest,
+        this.wordsDeltaFilePath()
+      );
+      this.status = result.success ? WebDavSyncStatus.IDLE : WebDavSyncStatus.ERROR;
+      return result;
+    } catch (e) {
+      this.status = WebDavSyncStatus.ERROR;
+      const msg = e instanceof Error ? e.message : String(e);
+      return WebDavSyncResult.fail('上传单词增量失败', msg);
+    }
+  }
+
+  async downloadWordsDelta(): Promise<WebDavSyncResult> {
+    const missing = this.requireConfigured();
+    if (missing !== null) return missing;
+
+    this.status = WebDavSyncStatus.SYNCING;
+    try {
+      const client = this.createClient();
+      const preflight = await this.preflightRemoteRoot(client);
+      if (preflight !== null) {
+        this.status = WebDavSyncStatus.ERROR;
+        return preflight;
+      }
+
+      const result = await this.incrementalSync.downloadAndMergeWordsDelta(
+        client,
+        this.settings,
+        this.manifest,
+        this.wordsDeltaFilePath()
+      );
+      this.status = result.success ? WebDavSyncStatus.IDLE : WebDavSyncStatus.ERROR;
+      return result;
+    } catch (e) {
+      this.status = WebDavSyncStatus.ERROR;
+      const msg = e instanceof Error ? e.message : String(e);
+      return WebDavSyncResult.fail('下载单词增量失败', msg);
+    }
+  }
+
+  async uploadDefinitions(): Promise<WebDavSyncResult> {
+    const missing = this.requireConfigured();
+    if (missing !== null) return missing;
+
+    this.status = WebDavSyncStatus.SYNCING;
+    try {
+      const client = this.createClient();
+      const preflight = await this.preflightRemoteRoot(client);
+      if (preflight !== null) {
+        this.status = WebDavSyncStatus.ERROR;
+        return preflight;
+      }
+
+      const result = await this.incrementalSync.uploadDefinitions(
+        client,
+        this.settings,
+        this.manifest,
+        this.definitionsFilePath()
+      );
+      this.status = result.success ? WebDavSyncStatus.IDLE : WebDavSyncStatus.ERROR;
+      return result;
+    } catch (e) {
+      this.status = WebDavSyncStatus.ERROR;
+      const msg = e instanceof Error ? e.message : String(e);
+      return WebDavSyncResult.fail('上传释义数据失败', msg);
+    }
+  }
+
+  async downloadDefinitions(): Promise<WebDavSyncResult> {
+    const missing = this.requireConfigured();
+    if (missing !== null) return missing;
+
+    this.status = WebDavSyncStatus.SYNCING;
+    try {
+      const client = this.createClient();
+      const preflight = await this.preflightRemoteRoot(client);
+      if (preflight !== null) {
+        this.status = WebDavSyncStatus.ERROR;
+        return preflight;
+      }
+
+      const result = await this.incrementalSync.downloadDefinitions(
+        client,
+        this.settings,
+        this.definitionsFilePath()
+      );
+      this.status = result.success ? WebDavSyncStatus.IDLE : WebDavSyncStatus.ERROR;
+      return result;
+    } catch (e) {
+      this.status = WebDavSyncStatus.ERROR;
+      const msg = e instanceof Error ? e.message : String(e);
+      return WebDavSyncResult.fail('下载释义数据失败', msg);
+    }
+  }
+}
