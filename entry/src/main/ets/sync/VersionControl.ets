@@ -161,6 +161,11 @@ export class VersionControl {
 
   /**
    * 更新时间戳（不增加版本号）
+   * 
+   * 注意：
+   * 1. 此方法仅更新内存中的时间戳，不负责持久化。
+   * 2. VersionControl 通常嵌入在导出数据中一起持久化。
+   * 3. 调用者需确保不存在并发修改（WebDavSyncManager 已通过 status 字段防止并发备份）。
    */
   updateTimestamp(): void {
     this.currentVersion.timestamp = Date.now();

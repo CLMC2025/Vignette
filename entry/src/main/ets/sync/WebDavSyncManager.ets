@@ -960,7 +960,8 @@ export class WebDavSyncManager {
           syncManager.getVersionControl().updateTimestamp();
           console.info('[WebDavSyncManager] Local VersionControl timestamp updated after backup');
         } catch (e) {
-          console.warn('[WebDavSyncManager] Failed to update local VersionControl:', e);
+          const errMsg = e instanceof Error ? e.message : String(e);
+          console.warn(`[WebDavSyncManager] Failed to update local VersionControl: ${errMsg}`);
         }
         
         const totalBackupMs = Date.now() - backupStartMs;
