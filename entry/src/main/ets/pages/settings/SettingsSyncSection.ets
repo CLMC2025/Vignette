@@ -162,6 +162,25 @@ export struct SettingsSyncSection {
   }
 
   private async webdavRestore(): Promise<void> {
+    // 第一层确认：点击按钮后立即弹出，防止误触
+    try {
+      const firstConfirm = await promptAction.showDialog({
+        title: '从云端恢复',
+        message: '⚠️ 警告：此操作将从云端下载备份并覆盖本地数据，本地未同步的学习记录将丢失。\n\n确定要继续吗？',
+        buttons: [
+          { text: '取消', color: String(this.colors.TEXT_SECONDARY) },
+          { text: '继续', color: String(this.colors.WARNING) }
+        ]
+      });
+      const clicked = firstConfirm as DialogIndexResult;
+      if (clicked.index === 0) {
+        return; // 用户取消，不执行任何操作
+      }
+    } catch (e) {
+      return; // 对话框被关闭，视为取消
+    }
+
+    // 通过第一层确认后，执行下载和预览（内部还有第二层确认）
     await this.runWebDavBackupAction(async () => this.webdavRestoreWithPreview());
   }
 

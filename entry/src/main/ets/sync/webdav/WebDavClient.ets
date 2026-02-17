@@ -62,12 +62,15 @@ export class WebDavClient implements IWebDavBackend {
     try {
       const headRes = await this.head(parent);
       if (headRes.statusCode === 404) {
+        console.info(`[WebDavClient] Creating parent directory: ${parent}`);
         // 递归创建父目录
         await this.ensureParentExists(parent);
         await this.mkcol(parent);
       }
     } catch (e) {
       // 忽略检查错误，让 PUT 自己失败
+      const errMsg = e instanceof Error ? e.message : String(e);
+      console.warn(`[WebDavClient] ensureParentExists failed for ${parent}: ${errMsg} (will continue)`);
     }
   }
 

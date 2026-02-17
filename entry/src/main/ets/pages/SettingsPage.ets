@@ -19,6 +19,7 @@ import { DesignTokens } from '../model/DesignTokens';
 import { WebDavStateStore } from '../utils/WebDavStateStore';
 import { ColorsInterface } from '../model/TokenInterfaces';
 import { logger } from '../utils/Logger';
+import { buildUserFacingError } from '../utils/ErrorClassifier';
 
 // Refactored Components
 import { SettingsSectionItem } from './settings/SettingsCommon';
@@ -339,7 +340,12 @@ struct SettingsPage {
       return persisted;
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e);
-      promptAction.showToast({ message: '保存失败: ' + errMsg, duration: 2000 });
+      const errorInfo = buildUserFacingError(errMsg);
+      promptAction.showToast({ 
+        message: `${errorInfo.title}：${errorInfo.userMessage}`, 
+        duration: 3000 
+      });
+      logger.error('SettingsPage', `Failed to save settings: ${errMsg}`);
       return false;
     }
   }
@@ -355,7 +361,13 @@ struct SettingsPage {
   private async confirmImportFromDialog(jsonData: string): Promise<void> {
     const preview = await this.syncManager.previewImport(jsonData);
     if (preview.errors.length > 0) {
-      promptAction.showToast({ message: `❌ 解析失败: ${preview.errors.join(', ')}`, duration: 2000 });
+      const firstError = preview.errors[0] || '数据格式错误';
+      const errorInfo = buildUserFacingError(firstError);
+      promptAction.showToast({ 
+        message: `❌ 导入失败：${errorInfo.userMessage}`, 
+        duration: 3000 
+      });
+      logger.error('SettingsPage', `Import preview failed: ${preview.errors.join(', ')}`);
       return;
     }
 
@@ -374,9 +386,18 @@ struct SettingsPage {
 
     const result = await this.syncManager.importData(jsonData);
     if (result.hasErrors()) {
-      promptAction.showToast({ message: `❌ 导入失败: ${result.errors.join(', ')}`, duration: 2000 });
+      const firstError = result.errors[0] || '导入过程出错';
+      const errorInfo = buildUserFacingError(firstError);
+      promptAction.showToast({ 
+        message: `❌ 导入失败：${errorInfo.userMessage}`, 
+        duration: 3000 
+      });
+      logger.error('SettingsPage', `Import data failed: ${result.errors.join(', ')}`);
     } else {
-      promptAction.showToast({ message: `✅ 导入成功！${result.getSummary()}`, duration: 2000 });
+      promptAction.showToast({ 
+        message: `✅ 导入成功！${result.getSummary()}`, 
+        duration: 2500 
+      });
       this.showSyncDialog = false;
     }
   }

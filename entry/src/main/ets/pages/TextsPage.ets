@@ -38,9 +38,14 @@ struct TextsPage {
   }
 
   private async ensureDBAndLoad(): Promise<void> {
+    console.info('[TextsPage] Initializing database');
     try {
       await this.dbManager.initialize(this.context!);
-    } catch (_) {}
+      console.info('[TextsPage] Database initialized successfully');
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      console.error(`[TextsPage] Database initialization failed: ${errMsg}`);
+    }
     await this.loadTexts();
   }
 

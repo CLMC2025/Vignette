@@ -1,6 +1,7 @@
 import { DesignTokens } from '../model/DesignTokens';
 import { ColorsInterface } from '../model/TokenInterfaces';
 import { ThemeManager } from '../manager/ThemeManager';
+import vibrator from '@ohos.vibrator';
 
 export enum FlashButton {
   NONE = 'NONE',
@@ -37,20 +38,48 @@ export struct FeedbackBar {
     this.colors = ThemeManager.getInstance().getColors();
   }
 
+  /**
+   * Provide haptic feedback on button press
+   */
+  private triggerHapticFeedback(intensity: 'light' | 'medium' | 'heavy' = 'medium'): void {
+    try {
+      const duration = intensity === 'light' ? 10 : (intensity === 'medium' ? 20 : 35);
+      vibrator.startVibration({
+        type: 'time',
+        duration: duration
+      });
+    } catch (e) {
+      // Haptic feedback not critical, silently ignore errors
+    }
+  }
+
   private getForgetButtonBg(): ResourceColor {
-    return this.flashButton === FlashButton.FORGET ? this.colors.ERROR_LIGHT : this.colors.ERROR;
+    if (!this.isReviewCooling) {
+      return this.flashButton === FlashButton.FORGET ? this.colors.ERROR_LIGHT : this.colors.ERROR;
+    }
+    // Disabled state: dimmed version
+    return this.colors.GRAY_300;
   }
 
   private getHardButtonBg(): ResourceColor {
-    return this.flashButton === FlashButton.HARD ? this.colors.WARNING_LIGHT : this.colors.WARNING;
+    if (!this.isReviewCooling) {
+      return this.flashButton === FlashButton.HARD ? this.colors.WARNING_LIGHT : this.colors.WARNING;
+    }
+    return this.colors.GRAY_300;
   }
 
   private getRememberButtonBg(): ResourceColor {
-    return this.flashButton === FlashButton.REMEMBER ? this.colors.SUCCESS_LIGHT : this.colors.SUCCESS;
+    if (!this.isReviewCooling) {
+      return this.flashButton === FlashButton.REMEMBER ? this.colors.SUCCESS_LIGHT : this.colors.SUCCESS;
+    }
+    return this.colors.GRAY_300;
   }
 
   private getEasyButtonBg(): ResourceColor {
-    return this.flashButton === FlashButton.EASY ? this.colors.PRIMARY_LIGHT : this.colors.PRIMARY;
+    if (!this.isReviewCooling) {
+      return this.flashButton === FlashButton.EASY ? this.colors.PRIMARY_LIGHT : this.colors.PRIMARY;
+    }
+    return this.colors.GRAY_300;
   }
 
   build() {
@@ -61,12 +90,13 @@ export struct FeedbackBar {
             .fontSize(DesignTokens.Typography.FONT_SIZE_BASE)
             .fontWeight(DesignTokens.Typography.FONT_WEIGHT_MEDIUM)
             .fontColor(this.colors.WHITE)
+            .opacity(this.isReviewCooling ? 0.5 : 1.0)
 
           if (this.intervalHints.again.length > 0) {
             Text(this.intervalHints.again)
               .fontSize(DesignTokens.Typography.FONT_SIZE_XS)
               .fontColor(this.colors.WHITE)
-              .opacity(0.85)
+              .opacity(this.isReviewCooling ? 0.4 : 0.85)
               .margin({ top: DesignTokens.Spacing.XS })
           }
         }
@@ -81,7 +111,12 @@ export struct FeedbackBar {
         .borderRadius(DesignTokens.BorderRadius.XL)
         .enabled(!this.isReviewCooling)
         .stateEffect(true)
-        .onClick(() => this.onForget())
+        .accessibilityLevel('yes')
+        .accessibilityText('重来：标记为不记得，这个单词会很快再次出现')
+        .onClick(() => {
+          this.triggerHapticFeedback('medium');
+          this.onForget();
+        })
         .gesture(
           LongPressGesture({ repeat: false, duration: 500 })
             .onAction(() => {
@@ -96,12 +131,13 @@ export struct FeedbackBar {
               .fontSize(DesignTokens.Typography.FONT_SIZE_BASE)
               .fontWeight(DesignTokens.Typography.FONT_WEIGHT_MEDIUM)
               .fontColor(this.colors.WHITE)
+              .opacity(this.isReviewCooling ? 0.5 : 1.0)
 
             if (this.intervalHints.hard.length > 0) {
               Text(this.intervalHints.hard)
                 .fontSize(DesignTokens.Typography.FONT_SIZE_XS)
                 .fontColor(this.colors.WHITE)
-                .opacity(0.85)
+                .opacity(this.isReviewCooling ? 0.4 : 0.85)
                 .margin({ top: DesignTokens.Spacing.XS })
             }
           }
@@ -116,7 +152,12 @@ export struct FeedbackBar {
           .borderRadius(DesignTokens.BorderRadius.XL)
           .enabled(!this.isReviewCooling)
           .stateEffect(true)
-          .onClick(() => this.onHard())
+          .accessibilityLevel('yes')
+          .accessibilityText('困难：记忆模糊，会在较短时间内再次复习')
+          .onClick(() => {
+            this.triggerHapticFeedback('light');
+            this.onHard();
+          })
           .gesture(
             LongPressGesture({ repeat: false, duration: 500 })
               .onAction(() => {
@@ -131,12 +172,13 @@ export struct FeedbackBar {
             .fontSize(DesignTokens.Typography.FONT_SIZE_BASE)
             .fontWeight(DesignTokens.Typography.FONT_WEIGHT_MEDIUM)
             .fontColor(this.colors.WHITE)
+            .opacity(this.isReviewCooling ? 0.5 : 1.0)
 
           if (this.intervalHints.good.length > 0) {
             Text(this.intervalHints.good)
               .fontSize(DesignTokens.Typography.FONT_SIZE_XS)
               .fontColor(this.colors.WHITE)
-              .opacity(0.85)
+              .opacity(this.isReviewCooling ? 0.4 : 0.85)
               .margin({ top: DesignTokens.Spacing.XS })
           }
         }
@@ -151,7 +193,12 @@ export struct FeedbackBar {
         .borderRadius(DesignTokens.BorderRadius.XL)
         .enabled(!this.isReviewCooling)
         .stateEffect(true)
-        .onClick(() => this.onRemember())
+        .accessibilityLevel('yes')
+        .accessibilityText('良好：记忆清楚，按默认间隔复习')
+        .onClick(() => {
+          this.triggerHapticFeedback('light');
+          this.onRemember();
+        })
         .gesture(
           LongPressGesture({ repeat: false, duration: 500 })
             .onAction(() => {
@@ -165,12 +212,13 @@ export struct FeedbackBar {
             .fontSize(DesignTokens.Typography.FONT_SIZE_BASE)
             .fontWeight(DesignTokens.Typography.FONT_WEIGHT_MEDIUM)
             .fontColor(this.colors.WHITE)
+            .opacity(this.isReviewCooling ? 0.5 : 1.0)
 
           if (this.intervalHints.easy.length > 0) {
             Text(this.intervalHints.easy)
               .fontSize(DesignTokens.Typography.FONT_SIZE_XS)
               .fontColor(this.colors.WHITE)
-              .opacity(0.85)
+              .opacity(this.isReviewCooling ? 0.4 : 0.85)
               .margin({ top: DesignTokens.Spacing.XS })
           }
         }
@@ -185,7 +233,12 @@ export struct FeedbackBar {
         .borderRadius(DesignTokens.BorderRadius.XL)
         .enabled(!this.isReviewCooling)
         .stateEffect(true)
-        .onClick(() => this.onEasy())
+        .accessibilityLevel('yes')
+        .accessibilityText('简单：记忆牢固，延长复习间隔')
+        .onClick(() => {
+          this.triggerHapticFeedback('light');
+          this.onEasy();
+        })
         .gesture(
           LongPressGesture({ repeat: false, duration: 500 })
             .onAction(() => {
