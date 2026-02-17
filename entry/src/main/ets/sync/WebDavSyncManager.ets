@@ -1088,6 +1088,10 @@ export class WebDavSyncManager {
     taskFn: (params: TParams) => TResult | Promise<TResult>,
     params: TParams
   ): Promise<TResult> {
+    // Error patterns for detection
+    const CRYPTO_ERROR_PATTERNS = ['SecureRandomError', '无法生成安全随机数', 'CryptoError', 'MAC verification failed'];
+    const TASKPOOL_ERROR_PATTERNS = ['Capability not support', 'Capability not supported', 'TaskPool not support'];
+    
     try {
       return await taskpool.execute(new taskpool.Task(taskFn, params)) as TResult;
     } catch (e) {
@@ -1095,10 +1099,7 @@ export class WebDavSyncManager {
       
       // 优先检查是否为 crypto 相关错误
       // 这些错误即使 fallback 到主线程也无法解决，应该直接抛出
-      const isCryptoError = msg.includes('SecureRandomError') || 
-                            msg.includes('无法生成安全随机数') ||
-                            msg.includes('CryptoError') ||
-                            msg.includes('MAC verification failed');
+      const isCryptoError = CRYPTO_ERROR_PATTERNS.some(pattern => msg.includes(pattern));
       
       if (isCryptoError) {
         console.error(`[WebDavSyncManager] Crypto operation failed: ${msg}`);
@@ -1106,15 +1107,14 @@ export class WebDavSyncManager {
       }
       
       // 仅捕获 TaskPool 不支持的错误（匹配多种变体）
-      const isTaskPoolError = msg.includes('Capability not support') ||
-                              msg.includes('Capability not supported') ||
-                              msg.includes('TaskPool not support');
+      const isTaskPoolError = TASKPOOL_ERROR_PATTERNS.some(pattern => msg.includes(pattern));
       
       if (isTaskPoolError) {
         console.warn(`[WebDavSyncManager] TaskPool not supported on this device, falling back to main thread. Error: ${msg}`);
-        console.warn(`[WebDavSyncManager] UI may freeze temporarily during encryption/network operations.`);
         try {
-          return await taskFn(params);
+          const result = await taskFn(params);
+          console.warn(`[WebDavSyncManager] Fallback to main thread succeeded. Note: UI may freeze during encryption/network operations.`);
+          return result;
         } catch (fallbackError) {
           // 如果 fallback 也失败了，提供更有用的错误信息
           const fbMsg = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
