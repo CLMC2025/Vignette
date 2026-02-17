@@ -41,6 +41,7 @@ export struct SettingsSyncSection {
   @State webdavResult: string = '';
   @State webdavBackupResult: string = '';
   @State webdavBusy: boolean = false;
+  @State restoreDialogShowing: boolean = false; // Bug fix: 防止重复弹出恢复确认对话框
 
   private webdavManager: WebDavSyncManager = WebDavSyncManager.getInstance();
   private webdavStateStore: WebDavStateStore = WebDavStateStore.getInstance();
@@ -162,6 +163,11 @@ export struct SettingsSyncSection {
   }
 
   private async webdavRestore(): Promise<void> {
+    // Bug fix: 检查是否已经在处理中，防止重复触发
+    if (this.webdavBusy) {
+      return;
+    }
+
     // 第一层确认：点击按钮后立即弹出，防止误触
     try {
       const firstConfirm = await promptAction.showDialog({
@@ -180,7 +186,8 @@ export struct SettingsSyncSection {
       return; // 对话框被关闭，视为取消
     }
 
-    // 通过第一层确认后，执行下载和预览（内部还有第二层确认）
+    // 执行下载和预览（内部还有第二层确认）
+    // runWebDavBackupAction 会管理 webdavBusy 状态和 UI 更新
     await this.runWebDavBackupAction(async () => this.webdavRestoreWithPreview());
   }
 
@@ -216,37 +223,49 @@ export struct SettingsSyncSection {
   }
 
   private async webdavRestoreWithPreview(): Promise<WebDavSyncResult> {
-    const download = await this.webdavManager.downloadBackupPlain(false);
-    if (!download.result.success) return download.result;
-    if (download.plain.length === 0) {
-      return WebDavSyncResult.fail('云端无备份', download.result.message || '未找到可用的备份文件');
+    // Bug fix: 防止重复弹出恢复确认对话框
+    if (this.restoreDialogShowing) {
+      console.warn('[SettingsSyncSection] Restore dialog already showing, skipping duplicate call');
+      return WebDavSyncResult.ok('已取消恢复');
     }
-
-    const preview = await this.syncManager.previewImport(download.plain);
-    if (preview.errors.length > 0) {
-      return WebDavSyncResult.fail('预览失败', preview.errors.join('; '));
-    }
-
-    const sample = preview.sampleUpdatedWords.length > 0 ? `\n示例：${preview.sampleUpdatedWords.join('、')}` : '';
-    const msg = `⚠️ 警告：此操作将覆盖本地数据！\n\n将覆盖更新 ${preview.updated} 词，新增 ${preview.imported} 词，共 ${preview.total} 词。${sample}\n\n本地未同步的学习记录将丢失，请确认是否继续？`;
 
     try {
-      const dialogResult = await promptAction.showDialog({
-        title: '⚠️ 恢复确认',
-        message: msg,
-        buttons: [
-          { text: '取消', color: String(this.colors.TEXT_SECONDARY) },
-          { text: '确认恢复', color: String(this.colors.ERROR) }
-        ]
-      });
+      this.restoreDialogShowing = true;
 
-      const clicked = dialogResult as DialogIndexResult;
-      if (clicked.index === 0) {
+      const download = await this.webdavManager.downloadBackupPlain(false);
+      if (!download.result.success) return download.result;
+      if (download.plain.length === 0) {
+        return WebDavSyncResult.fail('云端无备份', download.result.message || '未找到可用的备份文件');
+      }
+
+      const preview = await this.syncManager.previewImport(download.plain);
+      if (preview.errors.length > 0) {
+        return WebDavSyncResult.fail('预览失败', preview.errors.join('; '));
+      }
+
+      const sample = preview.sampleUpdatedWords.length > 0 ? `\n示例：${preview.sampleUpdatedWords.join('、')}` : '';
+      const msg = `⚠️ 警告：此操作将覆盖本地数据！\n\n将覆盖更新 ${preview.updated} 词，新增 ${preview.imported} 词，共 ${preview.total} 词。${sample}\n\n本地未同步的学习记录将丢失，请确认是否继续？`;
+
+      try {
+        const dialogResult = await promptAction.showDialog({
+          title: '⚠️ 恢复确认',
+          message: msg,
+          buttons: [
+            { text: '取消', color: String(this.colors.TEXT_SECONDARY) },
+            { text: '确认恢复', color: String(this.colors.ERROR) }
+          ]
+        });
+
+        const clicked = dialogResult as DialogIndexResult;
+        if (clicked.index === 0) {
+          return WebDavSyncResult.ok('已取消恢复');
+        }
+        return await this.webdavManager.importPlainBackup(download.plain);
+      } catch (e) {
         return WebDavSyncResult.ok('已取消恢复');
       }
-      return await this.webdavManager.importPlainBackup(download.plain);
-    } catch (e) {
-      return WebDavSyncResult.ok('已取消恢复');
+    } finally {
+      this.restoreDialogShowing = false;
     }
   }
 

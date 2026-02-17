@@ -4,6 +4,8 @@ import { WebDavCrypto, CryptoError } from './WebDavCrypto';
 import { WebDavStateStore } from '../../utils/WebDavStateStore';
 import { WebDavSettings, WebDavManifest, WebDavSyncResult, WebDavBackupPlainResult, safeTrim, parseHttpDateMillis } from './WebDavCommon';
 import { WebDavConflictResolver } from '../WebDavConflictResolver';
+import taskpool from '@ohos.taskpool';
+import { executeDecrypt, DecryptTaskParams, DecryptTaskResult } from './WebDavSyncTask';
 
 export class WebDavBackupManager {
   private syncManager: DataSyncManager;
@@ -106,11 +108,21 @@ export class WebDavBackupManager {
       );
     }
 
+    // Bug fix: 使用 TaskPool 在后台线程解密，避免阻塞主线程
     let plain: string;
     try {
-      plain = await WebDavCrypto.decryptUtf8Offloaded(getRes.body, settings.syncPassword);
+      const decryptParams: DecryptTaskParams = {
+        encryptedData: getRes.body,
+        syncPassword: settings.syncPassword
+      };
+      const decryptResult = await taskpool.execute(new taskpool.Task(executeDecrypt, decryptParams)) as DecryptTaskResult;
+      
+      if (!decryptResult.success) {
+        return new WebDavBackupPlainResult(WebDavSyncResult.fail('解密失败', decryptResult.detail), '');
+      }
+      plain = decryptResult.data;
     } catch (ce) {
-      const msg = ce instanceof CryptoError ? ce.message : String(ce);
+      const msg = ce instanceof Error ? ce.message : String(ce);
       return new WebDavBackupPlainResult(WebDavSyncResult.fail('解密失败', msg), '');
     }
 
@@ -155,11 +167,21 @@ export class WebDavBackupManager {
       return WebDavSyncResult.fail('下载失败', `GET ${getRes.statusCode}: ${getRes.body}`);
     }
 
+    // Bug fix: 使用 TaskPool 在后台线程解密，避免阻塞主线程
     let plain: string;
     try {
-      plain = await WebDavCrypto.decryptUtf8Offloaded(getRes.body, settings.syncPassword);
+      const decryptParams: DecryptTaskParams = {
+        encryptedData: getRes.body,
+        syncPassword: settings.syncPassword
+      };
+      const decryptResult = await taskpool.execute(new taskpool.Task(executeDecrypt, decryptParams)) as DecryptTaskResult;
+      
+      if (!decryptResult.success) {
+        return WebDavSyncResult.fail('解密失败', decryptResult.detail);
+      }
+      plain = decryptResult.data;
     } catch (ce) {
-      const msg = ce instanceof CryptoError ? ce.message : String(ce);
+      const msg = ce instanceof Error ? ce.message : String(ce);
       return WebDavSyncResult.fail('解密失败', msg);
     }
 
