@@ -45,10 +45,16 @@ export class WordRepository extends BaseRepository {
 
     let insertedCount = 0;
     if (words.length === 0) {
+      console.info('[WordRepository] Batch insert: no words to insert');
       return insertedCount;
     }
 
+    console.info(`[WordRepository] Starting batch insert of ${words.length} words`);
+    const startMs = Date.now();
+    
     await this.store!.executeSql('BEGIN TRANSACTION');
+    console.info('[WordRepository] Transaction BEGIN');
+    
     try {
       for (const word of words) {
         const rowId = await this.insertWord(word);
@@ -57,11 +63,14 @@ export class WordRepository extends BaseRepository {
         }
       }
       await this.store!.executeSql('COMMIT');
-      console.info(`[WordRepository] Batch inserted ${insertedCount}/${words.length} words`);
+      const elapsedMs = Date.now() - startMs;
+      console.info(`[WordRepository] Transaction COMMIT - Batch inserted ${insertedCount}/${words.length} words in ${elapsedMs}ms`);
       return insertedCount;
     } catch (e) {
       await this.store!.executeSql('ROLLBACK');
-      throw new DBError(`Batch insert failed: ${e instanceof Error ? e.message : String(e)}`);
+      const errMsg = e instanceof Error ? e.message : String(e);
+      console.error(`[WordRepository] Transaction ROLLBACK - Batch insert failed: ${errMsg}`);
+      throw new DBError(`Batch insert failed: ${errMsg}`);
     }
   }
 

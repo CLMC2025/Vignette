@@ -67,13 +67,25 @@ struct TextReaderPage {
 
   private async init(): Promise<void> {
     this.isLoading = true;
+    console.info('[TextReaderPage] Initializing');
+    
     try {
       await this.dbManager.initialize(this.context!);
-    } catch (_) {}
+      console.info('[TextReaderPage] Database initialized');
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      console.error(`[TextReaderPage] Database initialization failed: ${errMsg}`);
+    }
+    
     this.ctxWordMeaningStore.injectContext(this.context!);
     try {
       await this.ctxWordMeaningStore.initialize();
-    } catch (_) {}
+      console.info('[TextReaderPage] Context word meaning store initialized');
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      console.error(`[TextReaderPage] Context word meaning store initialization failed: ${errMsg}`);
+    }
+    
     const settingsStore = SettingsStore.getInstance();
     settingsStore.injectContext(this.context!);
     try {
@@ -82,14 +94,19 @@ struct TextReaderPage {
       if (settings !== null) {
         this.externalDictEnabled = settings.externalDictEnabled;
         this.externalDictUrlTemplate = settings.externalDictUrlTemplate;
+        console.info('[TextReaderPage] Settings loaded');
       }
-    } catch (_) {}
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      console.error(`[TextReaderPage] Settings initialization failed: ${errMsg}`);
+    }
 
     try {
       const params = router.getParams() as TextReaderPageParams;
       const id = Number(params?.textId ?? 0);
       this.textId = id;
       if (id <= 0) {
+        console.error('[TextReaderPage] Invalid text ID parameter');
         promptAction.showToast({ message: '无法打开文本：参数缺失', duration: 1500 });
         router.back();
         return;
