@@ -1080,6 +1080,9 @@ export class WebDavSyncManager {
 
   /**
    * 尝试在 TaskPool 中执行任务，如果 TaskPool 不可用则回退到主线程执行
+   * 
+   * 注意：在主线程执行加密/解密/网络请求等耗时操作可能导致 UI 卡顿。
+   * 仅当 TaskPool 不可用时才会使用此 fallback 方案。
    */
   private async executeTaskWithFallback<TParams, TResult>(
     taskFn: (params: TParams) => TResult | Promise<TResult>,
@@ -1089,8 +1092,9 @@ export class WebDavSyncManager {
       return await taskpool.execute(new taskpool.Task(taskFn, params)) as TResult;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes('Capability not support') || msg.includes('not support')) {
-        console.warn(`[WebDavSyncManager] TaskPool not supported, falling back to main thread: ${msg}`);
+      // 仅捕获 TaskPool 不支持的错误，其他错误继续抛出
+      if (msg.includes('Capability not support')) {
+        console.warn(`[WebDavSyncManager] TaskPool not supported on this device, falling back to main thread execution. UI may freeze temporarily during encryption/network operations: ${msg}`);
         return await taskFn(params);
       }
       throw e;  // 其他错误继续向上抛出
