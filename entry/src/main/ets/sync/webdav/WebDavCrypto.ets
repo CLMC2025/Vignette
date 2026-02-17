@@ -157,6 +157,9 @@ async function pbkdf2Sha256Async(password: Uint8Array, salt: Uint8Array, iterati
     throw new CryptoError('PBKDF2 dkLen must be > 0');
   }
 
+  console.info(`[WebDAV] crypto pbkdf2 start iterations=${iterations} dkLen=${dkLen}`);
+  const startMs = Date.now();
+
   const hLen = 32;
   const l = Math.ceil(dkLen / hLen);
   const r = dkLen - (l - 1) * hLen;
@@ -174,12 +177,20 @@ async function pbkdf2Sha256Async(password: Uint8Array, salt: Uint8Array, iterati
       if (j % 32 === 0) {
         await yieldToEventLoop();
       }
+      // Log progress every 2500 iterations
+      if (j % 2500 === 0) {
+        const progress = Math.round((j / iterations) * 100);
+        console.info(`[WebDAV] crypto pbkdf2 progress block=${i}/${l} iterations=${j}/${iterations} (${progress}%)`);
+      }
     }
 
     const take = (i === l) ? r : hLen;
     out.set(t.slice(0, take), outPos);
     outPos += take;
   }
+
+  const elapsedMs = Date.now() - startMs;
+  console.info(`[WebDAV] crypto pbkdf2 complete ms=${elapsedMs}`);
   return out;
 }
 
@@ -385,8 +396,10 @@ async function aes256CtrCryptAsync(data: Uint8Array, key: Uint8Array, iv: Uint8A
       incCounter(counter);
     }
     
-    if (chunk % 16 === 0) {
-      console.info(`[WebDAV] crypto aes progress bytes=${end}/${data.length}`);
+    // Log progress every 8 chunks (32KB) instead of 16 for more frequent updates
+    if (chunk % 8 === 0 && chunks > 8) {
+      const progress = Math.round((end / data.length) * 100);
+      console.info(`[WebDAV] crypto aes progress bytes=${end}/${data.length} (${progress}%)`);
     }
     
     await new Promise<void>((resolve) => setTimeout(resolve, 5));
@@ -425,8 +438,13 @@ export class WebDavCrypto {
   }
 
   static async encryptUtf8Async(plainText: string, password: string): Promise<string> {
+    console.info(`[WebDAV] crypto encrypt start input_size=${plainText.length} chars`);
+    const startMs = Date.now();
+    
     console.info('[WebDAV] crypto encrypt step=utf8');
     const plainBytes = await Base64Util.utf8EncodeAsync(plainText);
+    console.info(`[WebDAV] crypto encrypt utf8_bytes=${plainBytes.length}`);
+    
     const pwdBytes = Base64Util.utf8Encode(password);
     const salt = await randomBytes(16);
     console.info('[WebDAV] crypto encrypt step=pbkdf2');
@@ -452,6 +470,14 @@ export class WebDavCrypto {
       ct: ctB64,
       mac: macB64
     };
+    const result = JSON.stringify(payload);
+    const elapsedMs = Date.now() - startMs;
+    console.info(`[WebDAV] crypto encrypt complete output_size=${result.length} chars ms=${elapsedMs}`);
+    return result;
+  }
+      ct: ctB64,
+      mac: macB64
+    };
     return JSON.stringify(payload);
   }
 
@@ -465,13 +491,17 @@ export class WebDavCrypto {
     try {
       payload = JSON.parse(payloadJson) as EncryptedPayload;
     } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      console.error(`[WebDAV] crypto decrypt JSON parse error: ${errMsg}`);
       throw new CryptoError('Invalid encrypted payload JSON');
     }
 
     if (payload.v !== WebDavCrypto.VERSION) {
+      console.error(`[WebDAV] crypto decrypt version mismatch: got ${payload.v}, expected ${WebDavCrypto.VERSION}`);
       throw new CryptoError(`Unsupported payload version: ${payload.v}`);
     }
     if (payload.alg !== WebDavCrypto.ALG) {
+      console.error(`[WebDAV] crypto decrypt algorithm mismatch: got ${payload.alg}, expected ${WebDavCrypto.ALG}`);
       throw new CryptoError('Unsupported encryption algorithm');
     }
 
@@ -487,6 +517,7 @@ export class WebDavCrypto {
 
     const expectedMac = hmacSha256(keyMac, concat3(salt, iv, ct));
     if (!constantTimeEqual(mac, expectedMac)) {
+      console.error('[WebDAV] crypto decrypt MAC verification failed - incorrect password or corrupted data');
       throw new CryptoError('MAC verification failed');
     }
 
@@ -495,17 +526,23 @@ export class WebDavCrypto {
   }
 
   static async decryptUtf8Async(payloadJson: string, password: string): Promise<string> {
+    console.info('[WebDAV] crypto decrypt start');
+    const startMs = Date.now();
     let payload: EncryptedPayload;
     try {
       payload = JSON.parse(payloadJson) as EncryptedPayload;
     } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      console.error(`[WebDAV] crypto decrypt JSON parse error: ${errMsg}`);
       throw new CryptoError('Invalid encrypted payload JSON');
     }
 
     if (payload.v !== WebDavCrypto.VERSION) {
+      console.error(`[WebDAV] crypto decrypt version mismatch: got ${payload.v}, expected ${WebDavCrypto.VERSION}`);
       throw new CryptoError(`Unsupported payload version: ${payload.v}`);
     }
     if (payload.alg !== WebDavCrypto.ALG) {
+      console.error(`[WebDAV] crypto decrypt algorithm mismatch: got ${payload.alg}, expected ${WebDavCrypto.ALG}`);
       throw new CryptoError('Unsupported encryption algorithm');
     }
 
@@ -514,6 +551,8 @@ export class WebDavCrypto {
     const ct = Base64Util.decode(payload.ct);
     const mac = Base64Util.decode(payload.mac);
 
+    console.info(`[WebDAV] crypto decrypt data_size=${ct.length} bytes`);
+
     const pwdBytes = Base64Util.utf8Encode(password);
     const dk = await pbkdf2Sha256Async(pwdBytes, salt, 10000, 64);
     const keyEnc = dk.slice(0, 32);
@@ -521,10 +560,14 @@ export class WebDavCrypto {
 
     const expectedMac = hmacSha256(keyMac, concat3(salt, iv, ct));
     if (!constantTimeEqual(mac, expectedMac)) {
+      console.error('[WebDAV] crypto decrypt MAC verification failed - incorrect password or corrupted data');
       throw new CryptoError('MAC verification failed');
     }
 
+    console.info('[WebDAV] crypto decrypt step=aes');
     const plainBytes = await aes256CtrCryptAsync(ct, keyEnc, iv);
+    const elapsedMs = Date.now() - startMs;
+    console.info(`[WebDAV] crypto decrypt complete output_size=${plainBytes.length} bytes ms=${elapsedMs}`);
     return Base64Util.utf8Decode(plainBytes);
   }
 

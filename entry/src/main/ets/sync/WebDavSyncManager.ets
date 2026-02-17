@@ -670,21 +670,30 @@ export class WebDavSyncManager {
   // ==================== Incremental Sync ====================
 
   async syncIncremental(): Promise<WebDavSyncResult> {
+    console.info('[WebDavSyncManager] ==== Starting incremental sync ====');
+    const syncStartMs = Date.now();
+    
     const missing = this.requireConfigured();
-    if (missing !== null) return missing;
+    if (missing !== null) {
+      console.error('[WebDavSyncManager] Sync failed: not configured');
+      return missing;
+    }
 
     // 检查是否已经在同步中
     if (this.status === WebDavSyncStatus.SYNCING) {
+      console.warn('[WebDavSyncManager] Sync already in progress');
       return WebDavSyncResult.fail('同步操作正在进行中', '请等待当前同步完成后再试');
     }
 
     this.status = WebDavSyncStatus.SYNCING;
+    console.info('[WebDavSyncManager] Sync status set to SYNCING');
 
     // 先确保远程目录存在
     const client = this.createClient();
     const preflight = await this.preflightRemoteRoot(client);
     if (preflight !== null) {
       this.status = WebDavSyncStatus.ERROR;
+      console.error(`[WebDavSyncManager] Preflight check failed: ${preflight.message}`);
       return preflight;
     }
 
@@ -696,7 +705,8 @@ export class WebDavSyncManager {
       const dbManager = DBManager.getInstance();
 
       // ========== 步骤 1: 单词下载 ==========
-      console.info('[WebDavSyncManager] Step 1: Download words delta');
+      console.info('[WebDavSyncManager] ===== Step 1/4: Download words delta =====');
+      const step1StartMs = Date.now();
       const downloadParams: DownloadTaskParams = {
         endpoint: this.settings.endpoint,
         username: this.settings.username,
@@ -707,36 +717,50 @@ export class WebDavSyncManager {
         remoteFile: this.wordsDeltaFilePath()
       };
       const downloadResult = await taskpool.execute(new taskpool.Task(executeDownload, downloadParams)) as DownloadTaskResult;
+      const step1Ms = Date.now() - step1StartMs;
 
       if (!downloadResult.success) {
+        console.error(`[WebDavSyncManager] Step 1 failed: ${downloadResult.detail}`);
         return WebDavSyncResult.fail('增量同步失败（单词下载）', downloadResult.detail);
       }
+
+      console.info(`[WebDavSyncManager] Step 1 complete ms=${step1Ms} data_length=${downloadResult.data.length}`);
 
       // yield 给 UI 线程
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
       // 如果有数据，导入单词
       if (downloadResult.data.length > 0) {
+        console.info('[WebDavSyncManager] Importing downloaded words');
         const importResult = await syncManager.importIncremental(downloadResult.data);
         if (importResult.hasErrors()) {
+          console.error(`[WebDavSyncManager] Import failed: ${importResult.errors.join('; ')}`);
           return WebDavSyncResult.fail('增量同步失败（单词下载）', importResult.errors.join('; '));
         }
+        console.info('[WebDavSyncManager] Import complete');
+      } else {
+        console.info('[WebDavSyncManager] No words to import');
       }
 
       // yield 给 UI 线程
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
       // ========== 步骤 2: 单词上传 ==========
-      console.info('[WebDavSyncManager] Step 2: Upload words delta');
+      console.info('[WebDavSyncManager] ===== Step 2/4: Upload words delta =====');
+      const step2StartMs = Date.now();
       const exportResult = await syncManager.exportIncremental(this.manifest.lastWordsSyncMs, false);
       if (!exportResult.success) {
+        console.error(`[WebDavSyncManager] Step 2 export failed: ${exportResult.error}`);
         return WebDavSyncResult.fail('增量同步失败（单词上传）', exportResult.error);
       }
+
+      console.info(`[WebDavSyncManager] Step 2 export complete data_length=${exportResult.data.length}`);
 
       // yield 给 UI 线程
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
       if (exportResult.data.length > 0) {
+        console.info('[WebDavSyncManager] Uploading words to cloud');
         // 加密和上传数据（在 TaskPool 中执行，避免阻塞 UI）
         const uploadParams: UploadTaskWithEncryptParams = {
           endpoint: this.settings.endpoint,
@@ -751,15 +775,21 @@ export class WebDavSyncManager {
         const uploadResult = await taskpool.execute(new taskpool.Task(executeUploadWithEncrypt, uploadParams)) as UploadTaskResult;
 
         if (!uploadResult.success) {
+          console.error(`[WebDavSyncManager] Step 2 upload failed: ${uploadResult.detail}`);
           return WebDavSyncResult.fail('增量同步失败（单词上传）', uploadResult.detail);
         }
+        const step2Ms = Date.now() - step2StartMs;
+        console.info(`[WebDavSyncManager] Step 2 complete ms=${step2Ms}`);
+      } else {
+        console.info('[WebDavSyncManager] No words to upload, skipping step 2');
       }
 
       // yield 给 UI 线程
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
       // ========== 步骤 3: 事件下载 ==========
-      console.info('[WebDavSyncManager] Step 3: Download events');
+      console.info('[WebDavSyncManager] ===== Step 3/4: Download events =====');
+      const step3StartMs = Date.now();
       const eventsDownloadParams: DownloadTaskParams = {
         endpoint: this.settings.endpoint,
         username: this.settings.username,
@@ -772,30 +802,44 @@ export class WebDavSyncManager {
       const eventsDownloadResult = await taskpool.execute(new taskpool.Task(executeDownload, eventsDownloadParams)) as DownloadTaskResult;
 
       if (!eventsDownloadResult.success) {
+        console.error(`[WebDavSyncManager] Step 3 failed: ${eventsDownloadResult.detail}`);
         return WebDavSyncResult.fail('增量同步失败（事件下载）', eventsDownloadResult.detail);
       }
+
+      const step3Ms = Date.now() - step3StartMs;
+      console.info(`[WebDavSyncManager] Step 3 complete ms=${step3Ms} data_length=${eventsDownloadResult.data.length}`);
 
       // yield 给 UI 线程
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
       // 如果有数据，导入事件
       if (eventsDownloadResult.data.length > 0) {
+        console.info('[WebDavSyncManager] Importing review events');
         const events = this.parseEventsJsonl(eventsDownloadResult.data);
+        console.info(`[WebDavSyncManager] Parsed ${events.length} events, inserting to database`);
         await dbManager.insertReviewEvents(events);
+        console.info('[WebDavSyncManager] Events inserted successfully');
+      } else {
+        console.info('[WebDavSyncManager] No events to import');
       }
 
       // yield 给 UI 线程
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
       // ========== 步骤 4: 事件上传 ==========
-      console.info('[WebDavSyncManager] Step 4: Upload events');
+      console.info('[WebDavSyncManager] ===== Step 4/4: Upload events =====');
+      const step4StartMs = Date.now();
+      console.info(`[WebDavSyncManager] Fetching events after timestamp ${this.manifest.lastEventsSyncMs}`);
       const events = await dbManager.getReviewEventsAfter(this.manifest.lastEventsSyncMs);
+      console.info(`[WebDavSyncManager] Found ${events.length} events to upload`);
 
       // yield 给 UI 线程
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
       if (events.length > 0) {
+        console.info('[WebDavSyncManager] Serializing events');
         const eventsJsonl = this.serializeEventsJsonl(events);
+        console.info(`[WebDavSyncManager] Serialized to ${eventsJsonl.length} chars`);
 
         // yield 给 UI 线程
         await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -814,17 +858,30 @@ export class WebDavSyncManager {
         const eventsUploadResult = await taskpool.execute(new taskpool.Task(executeUploadWithEncrypt, eventsUploadParams)) as UploadTaskResult;
 
         if (!eventsUploadResult.success) {
+          console.error(`[WebDavSyncManager] Step 4 upload failed: ${eventsUploadResult.detail}`);
           return WebDavSyncResult.fail('增量同步失败（事件上传）', eventsUploadResult.detail);
         }
+        const step4Ms = Date.now() - step4StartMs;
+        console.info(`[WebDavSyncManager] Step 4 complete ms=${step4Ms}`);
+      } else {
+        console.info('[WebDavSyncManager] No events to upload, skipping step 4');
       }
 
+      const totalSyncMs = Date.now() - syncStartMs;
+      console.info(`[WebDavSyncManager] ==== Sync completed successfully total_ms=${totalSyncMs} ====`);
       return WebDavSyncResult.ok('同步完成');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      const stack = e instanceof Error ? e.stack : '';
+      console.error(`[WebDavSyncManager] Sync failed with exception: ${msg}`);
+      if (stack) {
+        console.error(`[WebDavSyncManager] Stack trace: ${stack}`);
+      }
       return WebDavSyncResult.fail('增量同步失败', msg);
     } finally {
       // 确保状态总是重置为 IDLE
       this.status = WebDavSyncStatus.IDLE;
+      console.info('[WebDavSyncManager] Sync status reset to IDLE');
     }
   }
 
@@ -832,21 +889,30 @@ export class WebDavSyncManager {
    * 在 TaskPool 中执行备份（后台执行，不阻塞 UI）
    */
   async backupToCloudInBackground(): Promise<WebDavSyncResult> {
+    console.info('[WebDavSyncManager] ==== Starting cloud backup ====');
+    const backupStartMs = Date.now();
+    
     const missing = this.requireConfigured();
-    if (missing !== null) return missing;
+    if (missing !== null) {
+      console.error('[WebDavSyncManager] Backup failed: not configured');
+      return missing;
+    }
 
     // 检查是否已经在同步中
     if (this.status === WebDavSyncStatus.SYNCING) {
+      console.warn('[WebDavSyncManager] Backup already in progress');
       return WebDavSyncResult.fail('同步操作正在进行中', '请等待当前同步完成后再试');
     }
 
     this.status = WebDavSyncStatus.SYNCING;
+    console.info('[WebDavSyncManager] Backup status set to SYNCING');
 
     // 先确保远程目录存在
     const client = this.createClient();
     const preflight = await this.preflightRemoteRoot(client);
     if (preflight !== null) {
       this.status = WebDavSyncStatus.ERROR;
+      console.error(`[WebDavSyncManager] Preflight check failed: ${preflight.message}`);
       return preflight;
     }
 
@@ -857,17 +923,22 @@ export class WebDavSyncManager {
       const syncManager = DataSyncManager.getInstance();
 
       // 导出数据（在主线程执行，需要数据库）
-      console.info('[WebDavSyncManager] Exporting data');
+      console.info('[WebDavSyncManager] Exporting data from database');
+      const exportStartMs = Date.now();
       const exportResult = await syncManager.exportData();
       if (!exportResult.success) {
+        console.error(`[WebDavSyncManager] Export failed: ${exportResult.error}`);
         return WebDavSyncResult.fail('备份失败', exportResult.error);
       }
+      const exportMs = Date.now() - exportStartMs;
+      console.info(`[WebDavSyncManager] Export complete data_size=${exportResult.data.length} chars ms=${exportMs}`);
 
       // yield 给 UI 线程
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
       // 加密和上传数据（在 TaskPool 中执行，避免阻塞 UI）
       console.info('[WebDavSyncManager] Starting encryption and upload in background');
+      const uploadStartMs = Date.now();
       const params: BackupTaskWithEncryptParams = {
         endpoint: this.settings.endpoint,
         username: this.settings.username,
@@ -881,18 +952,28 @@ export class WebDavSyncManager {
 
       const task = new taskpool.Task(executeBackupWithEncrypt, params);
       const result = await taskpool.execute(task) as BackupTaskResult;
+      const uploadMs = Date.now() - uploadStartMs;
 
       if (result.success) {
+        const totalBackupMs = Date.now() - backupStartMs;
+        console.info(`[WebDavSyncManager] ==== Backup completed successfully total_ms=${totalBackupMs} export_ms=${exportMs} upload_ms=${uploadMs} ====`);
         return WebDavSyncResult.ok(result.message);
       } else {
+        console.error(`[WebDavSyncManager] Backup failed: ${result.detail}`);
         return WebDavSyncResult.fail('备份失败', result.detail);
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      const stack = e instanceof Error ? e.stack : '';
+      console.error(`[WebDavSyncManager] Backup failed with exception: ${msg}`);
+      if (stack) {
+        console.error(`[WebDavSyncManager] Stack trace: ${stack}`);
+      }
       return WebDavSyncResult.fail('备份失败', msg);
     } finally {
       // 确保状态总是重置为 IDLE
       this.status = WebDavSyncStatus.IDLE;
+      console.info('[WebDavSyncManager] Backup status reset to IDLE');
     }
   }
 
