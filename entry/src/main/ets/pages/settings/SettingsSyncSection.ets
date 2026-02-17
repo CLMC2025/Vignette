@@ -272,7 +272,7 @@ export struct SettingsSyncSection {
       this.webdavBackupResult = '正在恢复数据...';
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-      const importResult = await this.runWithTimeout(() => this.webdavManager.importPlainBackup(download.plain), this.OPERATION_TIMEOUT);
+      const importResult = await this.runWithTimeout(() => this.webdavManager.importPlainBackup(download!.plain), this.OPERATION_TIMEOUT);
       this.webdavBackupResult = importResult.success ? `✅ ${importResult.message}` : `⚠️ ${importResult.message}：${importResult.detail}`;
       promptAction.showToast({ message: importResult.message, duration: 1200 });
 

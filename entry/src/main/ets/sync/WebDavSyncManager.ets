@@ -1084,7 +1084,7 @@ export class WebDavSyncManager {
    * 注意：在主线程执行加密/解密/网络请求等耗时操作可能导致 UI 卡顿。
    * 仅当 TaskPool 不可用时才会使用此 fallback 方案。
    */
-  private async executeTaskWithFallback<TParams, TResult>(
+  private async executeTaskWithFallback<TParams extends Object, TResult>(
     taskFn: (params: TParams) => TResult | Promise<TResult>,
     params: TParams
   ): Promise<TResult> {
@@ -1093,7 +1093,7 @@ export class WebDavSyncManager {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       // 仅捕获 TaskPool 不支持的错误（匹配多种变体），其他错误继续抛出
-      const isCapabilityError = msg.includes('Capability not support') || 
+      const isCapabilityError = msg.includes('Capability not support') ||
                                  msg.includes('Capability not supported') ||
                                  msg.includes('TaskPool not support');
       if (isCapabilityError) {
@@ -1101,7 +1101,7 @@ export class WebDavSyncManager {
         console.warn(`[WebDavSyncManager] UI may freeze temporarily during encryption/network operations. Error: ${msg}`);
         return await taskFn(params);
       }
-      throw e;  // 其他错误继续向上抛出
+      throw e instanceof Error ? e : new Error(String(e));
     }
   }
 
