@@ -6,7 +6,7 @@ import { ThemeManager } from '../../manager/ThemeManager';
 import { DataSyncManager, SyncStatus } from '../../sync/DataSyncManager';
 import { DataFileTransfer } from '../../sync/DataFileTransfer';
 import { formatError } from './SettingsCommon';
-import { logger } from '../../utils/Logger';
+
 import router from '@ohos.router';
 
 interface DialogIndexResult {
@@ -71,7 +71,7 @@ export struct SettingsBackupSection {
 
     this.isExporting = true;
     this.exportResult = '';
-    logger.info('Settings', '开始导出备份');
+    console.info('[Settings]', '开始导出备份');
 
     try {
       const result = await this.syncManager.exportData();
@@ -83,24 +83,24 @@ export struct SettingsBackupSection {
           this.exportResult = '导出成功';
           this.lastExportTime = new Date().toLocaleString();
           promptAction.showToast({ message: '已保存为备份文件', duration: 1500 });
-          logger.info('Settings', '备份导出成功');
+          console.info('[Settings]', '备份导出成功');
         } else if (saveRes.cancelled) {
           this.exportResult = '已取消导出';
-          logger.info('Settings', '备份导出取消');
+          console.info('[Settings]', '备份导出取消');
         } else {
           console.warn(`[SettingsPage] export fallback to clipboard: ${saveRes.error}`);
           this.exportResult = '导出失败';
           this.onShowDialog('导出数据（回退复制）', '系统文件选择器异常，已回退为复制方式（建议升级/修复系统文件管理器后再试保存）。', result.data, false);
-          logger.warn('Settings', '备份导出回退', saveRes.error);
+          console.warn('Settings', '备份导出回退', saveRes.error);
         }
       } else {
         this.exportResult = '导出失败';
-        logger.error('Settings', '备份导出失败', result.error);
+        console.error('[Settings]', '备份导出失败', result.error);
       }
     } catch (e) {
       const errMsg = formatError(e);
       this.exportResult = '导出错误';
-      logger.error('Settings', '备份导出异常', errMsg);
+      console.error('[Settings]', '备份导出异常', errMsg);
     } finally {
       this.isExporting = false;
     }
@@ -116,7 +116,7 @@ export struct SettingsBackupSection {
     }
     this.isImporting = true;
     this.importResult = '';
-    logger.info('Settings', '开始导入备份');
+    console.info('[Settings]', '开始导入备份');
     try {
       const context = getContext(this) as common.UIAbilityContext;
       const readRes = await DataFileTransfer.readJsonFromPickedFile(context);
@@ -124,7 +124,7 @@ export struct SettingsBackupSection {
         const jsonData = readRes.data.trim();
         if (jsonData.length === 0) {
           this.importResult = '导入文件为空';
-          logger.warn('Settings', '导入备份为空');
+          console.warn('Settings', '导入备份为空');
           return;
         }
         await this.confirmImportFromJson(jsonData);
@@ -132,18 +132,18 @@ export struct SettingsBackupSection {
       }
       if (readRes.cancelled) {
         this.importResult = '已取消导入';
-        logger.info('Settings', '导入备份取消');
+        console.info('[Settings]', '导入备份取消');
         return;
       }
       console.warn(`[SettingsPage] import fallback to paste: ${readRes.error}`);
       this.importResult = '导入错误';
       this.onShowDialog('导入数据（回退粘贴）', '系统文件选择器异常，请粘贴之前导出的 JSON 备份数据。', '', true);
-      logger.warn('Settings', '导入备份回退', readRes.error);
+      console.warn('Settings', '导入备份回退', readRes.error);
     } catch (e) {
       const errMsg = formatError(e);
       this.importResult = '导入错误';
       this.onShowDialog('导入数据（回退粘贴）', '读取备份文件失败，请粘贴之前导出的 JSON 备份数据。', '', true);
-      logger.error('Settings', '导入备份异常', errMsg);
+      console.error('[Settings]', '导入备份异常', errMsg);
     } finally {
       this.isImporting = false;
     }
@@ -153,7 +153,7 @@ export struct SettingsBackupSection {
     const preview = await this.syncManager.previewImport(jsonData);
     if (preview.errors.length > 0) {
       this.importResult = '解析失败';
-      logger.error('Settings', '导入预览失败', preview.errors.join(', '));
+      console.error('[Settings]', '导入预览失败', preview.errors.join(', '));
       return;
     }
 
@@ -173,17 +173,17 @@ export struct SettingsBackupSection {
       const clicked = dialogResult as DialogIndexResult;
       if (clicked.index === 0) {
         this.importResult = '已取消导入';
-        logger.info('Settings', '导入确认取消');
+        console.info('[Settings]', '导入确认取消');
         return;
       }
 
       const result = await this.syncManager.importData(jsonData);
       if (result.hasErrors()) {
         this.importResult = '导入失败';
-        logger.error('Settings', '导入执行失败', result.errors.join(', '));
+        console.error('[Settings]', '导入执行失败', result.errors.join(', '));
       } else {
         this.importResult = '导入成功';
-        logger.info('Settings', '导入执行成功');
+        console.info('[Settings]', '导入执行成功');
         void this.loadStats();
       }
     } catch (e) {

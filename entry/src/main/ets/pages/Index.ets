@@ -15,7 +15,6 @@ import { CelebrationParticles } from '../ui/CelebrationParticles';
 import { WebDavManifest, WebDavSettings } from '../sync/WebDavSyncManager';
 import { FeatureFlags } from '../utils/FeatureFlags';
 import { CurrentBookStore } from '../utils/CurrentBookStore';
-import { logger } from '../utils/Logger';
 import { Base64Util } from '../sync/webdav/Base64Util';
 import { AppNotificationRequest } from './index/IndexTypes';
 import { HomeTabContent } from './index/HomeTabContent';
@@ -79,14 +78,14 @@ struct Index {
     const dictManager = DictionaryManager.getInstance();
     dictManager.setResourceManager(this.resourceMgr);
     dictManager.initializeBuiltInDictionary().then(() => {
-      logger.info('App', '内置词典加载完成');
+      console.info('[App] 内置词典加载完成');
     }).catch((err: Error) => {
-      logger.error('App', '内置词典加载失败', err.message);
+      console.error('[App] 内置词典加载失败:', err.message);
     });
   }
 
   private async bootstrapApp(): Promise<void> {
-    logger.info('App', '后台初始化开始');
+    console.info('[App] 后台初始化开始');
     try {
       if (this.context !== null) {
         await Promise.all([
@@ -99,9 +98,9 @@ struct Index {
       if (AppStorage.get<string>(this.STORAGE_KEY_FIRST_RUN_MS) === undefined) {
         AppStorage.setOrCreate(this.STORAGE_KEY_FIRST_RUN_MS, String(Date.now()));
       }
-      logger.info('App', '后台初始化完成');
+      console.info('[App] 后台初始化完成');
     } catch (e) {
-      logger.error('App', '后台初始化失败', e);
+      console.error('[App] 后台初始化失败:', e);
     }
     this.runDeferredTasks();
     void this.maybeShowOnboarding();
@@ -137,7 +136,7 @@ struct Index {
       router.pushUrl({ url: 'pages/OnboardingPage' });
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e);
-      logger.error('App', 'Failed to check onboarding state', errMsg);
+      console.error('[App] Failed to check onboarding state:', errMsg);
     }
   }
 
@@ -153,12 +152,9 @@ struct Index {
         SettingsStore.getInstance().initialize()
       ]);
       this.storesInitialized = true;
-      if (this.context) {
-        await logger.initialize(this.context, false);
-      }
       void this.configureDictionaryManager();
     } catch (e) {
-      logger.error('App', '初始化存储失败', e);
+      console.error('[App] 初始化存储失败:', e);
     }
   }
 
@@ -179,7 +175,7 @@ struct Index {
       dictManager.setVignetteCacheSettings(settings.enableVignetteCache, settings.vignetteCacheMaxBytes, 300);
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e);
-      logger.error('App', 'Failed to configure dictionary manager', errMsg);
+      console.error('[App] Failed to configure dictionary manager:', errMsg);
     }
   }
 

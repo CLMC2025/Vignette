@@ -5,7 +5,7 @@
 
 import http from '@ohos.net.http';
 import { Base64Util } from './Base64Util';
-import { WebDavLogger } from '../../utils/WebDavLogger';
+
 import type { IWebDavBackend } from './IWebDavBackend';
 
 export interface WebDavResponse {
@@ -168,18 +168,18 @@ export class WebDavClient implements IWebDavBackend {
       const elapsed = Date.now() - startMs;
       if (redirectsLeft > 0 && (statusCode === 301 || statusCode === 302 || statusCode === 303 || statusCode === 307 || statusCode === 308)) {
         const location = resHeaders['location'] ?? '';
-        WebDavLogger.infoRequest(requestId, String(method), url, statusCode, location, elapsed);
+        console.info(`[WebDAV] ${String(method)} ${url} - ${statusCode} (redirect: ${location}) in ${elapsed}ms`);
         if (location.length > 0) {
           return this.requestWithRedirect(method, location, headers, body, redirectsLeft - 1, requestId);
         }
       }
-      WebDavLogger.infoRequest(requestId, String(method), url, statusCode, '', elapsed);
+      console.info(`[WebDAV] ${String(method)} ${url} - ${statusCode} in ${elapsed}ms`);
       return { statusCode, headers: resHeaders, body: bodyStr };
     } catch (e) {
       request.destroy();
       const err = this.buildHttpErrorInfo(e as (object | string | number | boolean | null | undefined));
       const elapsed = Date.now() - startMs;
-      WebDavLogger.errorRequest(requestId, String(method), url, err.code, err.message, elapsed);
+      console.error(`[WebDAV] ${String(method)} ${url} - ERROR ${err.code}: ${err.message} (${elapsed}ms)`);
       return { statusCode: 0, headers: {}, body: err.message };
     }
   }
