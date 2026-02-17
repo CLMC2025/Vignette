@@ -1,6 +1,7 @@
 import { DesignTokens } from '../model/DesignTokens';
 import { ColorsInterface } from '../model/TokenInterfaces';
 import { ThemeManager } from '../manager/ThemeManager';
+import vibrator from '@ohos.vibrator';
 
 export enum FlashButton {
   NONE = 'NONE',
@@ -35,6 +36,21 @@ export struct FeedbackBar {
 
   private onThemeChange(): void {
     this.colors = ThemeManager.getInstance().getColors();
+  }
+
+  /**
+   * Provide haptic feedback on button press
+   */
+  private triggerHapticFeedback(intensity: 'light' | 'medium' | 'heavy' = 'medium'): void {
+    try {
+      const duration = intensity === 'light' ? 10 : (intensity === 'medium' ? 20 : 35);
+      vibrator.startVibration({
+        type: 'time',
+        duration: duration
+      });
+    } catch (e) {
+      // Haptic feedback not critical, silently ignore errors
+    }
   }
 
   private getForgetButtonBg(): ResourceColor {
@@ -81,7 +97,10 @@ export struct FeedbackBar {
         .borderRadius(DesignTokens.BorderRadius.XL)
         .enabled(!this.isReviewCooling)
         .stateEffect(true)
-        .onClick(() => this.onForget())
+        .onClick(() => {
+          this.triggerHapticFeedback('medium');
+          this.onForget();
+        })
         .gesture(
           LongPressGesture({ repeat: false, duration: 500 })
             .onAction(() => {
@@ -116,7 +135,10 @@ export struct FeedbackBar {
           .borderRadius(DesignTokens.BorderRadius.XL)
           .enabled(!this.isReviewCooling)
           .stateEffect(true)
-          .onClick(() => this.onHard())
+          .onClick(() => {
+            this.triggerHapticFeedback('light');
+            this.onHard();
+          })
           .gesture(
             LongPressGesture({ repeat: false, duration: 500 })
               .onAction(() => {
@@ -151,7 +173,10 @@ export struct FeedbackBar {
         .borderRadius(DesignTokens.BorderRadius.XL)
         .enabled(!this.isReviewCooling)
         .stateEffect(true)
-        .onClick(() => this.onRemember())
+        .onClick(() => {
+          this.triggerHapticFeedback('light');
+          this.onRemember();
+        })
         .gesture(
           LongPressGesture({ repeat: false, duration: 500 })
             .onAction(() => {
@@ -185,7 +210,10 @@ export struct FeedbackBar {
         .borderRadius(DesignTokens.BorderRadius.XL)
         .enabled(!this.isReviewCooling)
         .stateEffect(true)
-        .onClick(() => this.onEasy())
+        .onClick(() => {
+          this.triggerHapticFeedback('light');
+          this.onEasy();
+        })
         .gesture(
           LongPressGesture({ repeat: false, duration: 500 })
             .onAction(() => {

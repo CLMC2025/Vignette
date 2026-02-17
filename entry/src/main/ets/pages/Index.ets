@@ -135,7 +135,10 @@ struct Index {
       }
       this.onboardingPushed = true;
       router.pushUrl({ url: 'pages/OnboardingPage' });
-    } catch (_) {}
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      logger.error('App', 'Failed to check onboarding state', errMsg);
+    }
   }
 
   private async initializeStores(): Promise<void> {
@@ -174,7 +177,10 @@ struct Index {
       dictManager.configure(settings.apiBaseUrl, apiKey, settings.apiModel);
       dictManager.setContextPreferences(this.mapContextStyle(settings.contextStyle), this.mapDifficultyLevel(settings.difficultyLevel), settings.customContextStyle);
       dictManager.setVignetteCacheSettings(settings.enableVignetteCache, settings.vignetteCacheMaxBytes, 300);
-    } catch (_) {}
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      logger.error('App', 'Failed to configure dictionary manager', errMsg);
+    }
   }
 
   private mapContextStyle(raw: string): ContextStyle {
