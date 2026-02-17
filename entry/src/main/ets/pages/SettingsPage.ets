@@ -18,7 +18,7 @@ import { SettingsStore } from '../utils/SettingsStore';
 import { DesignTokens } from '../model/DesignTokens';
 import { WebDavStateStore } from '../utils/WebDavStateStore';
 import { ColorsInterface } from '../model/TokenInterfaces';
-import { logger } from '../utils/Logger';
+
 import { buildUserFacingError } from '../utils/ErrorClassifier';
 
 // Refactored Components
@@ -40,7 +40,6 @@ const SETTINGS_SECTIONS: SettingsSectionItem[] = [
   { id: 'api', title: 'API配置', subtitle: '提供商、接口与模型选择' },
   { id: 'sync', title: 'WebDAV 配置', subtitle: '云端连接与自动同步设置' },
   { id: 'backup', title: '备份与恢复', subtitle: '云端/本地数据导入导出' },
-  { id: 'logger', title: '日志与调试', subtitle: '查看、导出与持久化策略（默认 WARN/ERROR）' },
   { id: 'about', title: '关于', subtitle: '版本、隐私与开源信息' }
 ];
 
@@ -167,7 +166,7 @@ struct SettingsPage {
     await this.webdavStateStore.initialize();
     this.loadWebDavSettings();
     await this.loadWebDavAutoSyncSettings();
-    logger.info('Settings', '进入设置页');
+    console.info('[Settings]', '进入设置页');
   }
 
   private handleHeaderBack(): void {
@@ -345,7 +344,7 @@ struct SettingsPage {
         message: `${errorInfo.title}：${errorInfo.userMessage}`, 
         duration: 3000 
       });
-      logger.error('SettingsPage', `Failed to save settings: ${errMsg}`);
+      console.error('[SettingsPage]', `Failed to save settings: ${errMsg}`);
       return false;
     }
   }
@@ -367,7 +366,7 @@ struct SettingsPage {
         message: `❌ 导入失败：${errorInfo.userMessage}`, 
         duration: 3000 
       });
-      logger.error('SettingsPage', `Import preview failed: ${preview.errors.join(', ')}`);
+      console.error('[SettingsPage]', `Import preview failed: ${preview.errors.join(', ')}`);
       return;
     }
 
@@ -392,7 +391,7 @@ struct SettingsPage {
         message: `❌ 导入失败：${errorInfo.userMessage}`, 
         duration: 3000 
       });
-      logger.error('SettingsPage', `Import data failed: ${result.errors.join(', ')}`);
+      console.error('[SettingsPage]', `Import data failed: ${result.errors.join(', ')}`);
     } else {
       promptAction.showToast({ 
         message: `✅ 导入成功！${result.getSummary()}`, 
@@ -526,11 +525,7 @@ struct SettingsPage {
                     .padding({ left: DesignTokens.Spacing.LG, right: DesignTokens.Spacing.LG })
                     .alignItems(VerticalAlign.Center)
                     .onClick(() => {
-                      if (item.id === 'logger') {
-                        router.pushUrl({ url: 'pages/LoggerPage' });
-                      } else {
-                        this.activeSectionId = item.id;
-                      }
+                      this.activeSectionId = item.id;
                     })
                     
                     Divider().color(this.colors.GRAY_200).margin({ left: DesignTokens.Spacing.LG, right: DesignTokens.Spacing.LG })
