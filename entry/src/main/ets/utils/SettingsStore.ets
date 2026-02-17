@@ -92,8 +92,11 @@ export class SettingsStore {
       const raw = await preferences.getPreferences(this.abilityContext, SettingsStore.PREFERENCES_NAME);
       this.prefs = new PreferencesStringAdapter(raw);
       this.isInitialized = true;
+      console.info('[SettingsStore] Preferences initialized successfully');
       return true;
     } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      console.error(`[SettingsStore] Failed to initialize preferences: ${errMsg}`);
       this.prefs = null;
       this.isInitialized = false;
       return false;
@@ -117,8 +120,11 @@ export class SettingsStore {
     try {
       await this.prefs.put(SettingsStore.SETTINGS_JSON_KEY, settings.toJSON());
       await this.prefs.flush();
+      console.info('[SettingsStore] Settings saved successfully');
       return true;
     } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      console.error(`[SettingsStore] Failed to save settings: ${errMsg}`);
       return false;
     }
   }
@@ -133,10 +139,15 @@ export class SettingsStore {
     try {
       const json = await this.prefs.get(SettingsStore.SETTINGS_JSON_KEY, '');
       if (json.length === 0) {
+        console.info('[SettingsStore] No settings found, returning null');
         return null;
       }
-      return AppSettings.fromJSON(json);
+      const settings = AppSettings.fromJSON(json);
+      console.info('[SettingsStore] Settings loaded successfully');
+      return settings;
     } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      console.error(`[SettingsStore] Failed to load settings: ${errMsg}`);
       return null;
     }
   }
@@ -151,8 +162,11 @@ export class SettingsStore {
     try {
       await this.prefs.put(SettingsStore.FSRS_PARAMS_JSON_KEY, params.toJSON());
       await this.prefs.flush();
+      console.info('[SettingsStore] FSRS parameters saved successfully');
       return true;
     } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      console.error(`[SettingsStore] Failed to save FSRS parameters: ${errMsg}`);
       return false;
     }
   }

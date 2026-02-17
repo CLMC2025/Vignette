@@ -28,10 +28,25 @@ import { isUniqueConstraintErrorMessage } from '../../utils/DatabaseErrorUtil';
 export class WordBookRepository extends BaseRepository {
 
   /**
+   * Helper to safely get optional column value with logging
+   */
+  private getOptionalColumn(resultSet: relationalStore.ResultSet, columnName: string, defaultValue: string): string {
+    try {
+      const index = resultSet.getColumnIndex(columnName);
+      return resultSet.getString(index);
+    } catch (e) {
+      // Column doesn't exist in this schema version - this is expected for backwards compatibility
+      return defaultValue;
+    }
+  }
+
+  /**
    * Get user word books
    */
   async getUserWordBooks(): Promise<UserWordBook[]> {
     this.ensureInitialized();
+    console.info('[WordBookRepository] Fetching user word books');
+    const startMs = Date.now();
 
     const predicates = new relationalStore.RdbPredicates(TABLE_USER_WORD_BOOKS);
     predicates.orderByDesc('updated_at');
@@ -39,30 +54,27 @@ export class WordBookRepository extends BaseRepository {
     const resultSet = await this.store!.query(predicates);
     const books: UserWordBook[] = [];
 
+    // First, collect all book IDs
+    const bookIds: string[] = [];
     while (resultSet.goToNextRow()) {
       const bookId = resultSet.getString(resultSet.getColumnIndex('id'));
+      bookIds.push(bookId);
       const name = resultSet.getString(resultSet.getColumnIndex('name'));
       const createdAt = Number(resultSet.getLong(resultSet.getColumnIndex('created_at')));
       const updatedAt = Number(resultSet.getLong(resultSet.getColumnIndex('updated_at')));
-      // New columns check
-      let description = '';
-      let category = '其他';
-      let difficulty = '初级';
-      let coverColor = '["#a8edea", "#fed6e3"]';
-      let icon = '📓';
 
-      try { description = resultSet.getString(resultSet.getColumnIndex('description')); } catch (e) { }
-      try { category = resultSet.getString(resultSet.getColumnIndex('category')); } catch (e) { }
-      try { difficulty = resultSet.getString(resultSet.getColumnIndex('difficulty')); } catch (e) { }
-      try { coverColor = resultSet.getString(resultSet.getColumnIndex('cover_color')); } catch (e) { }
-      try { icon = resultSet.getString(resultSet.getColumnIndex('icon')); } catch (e) { }
+      // New columns check with helper
+      const description = this.getOptionalColumn(resultSet, 'description', '');
+      const category = this.getOptionalColumn(resultSet, 'category', '其他');
+      const difficulty = this.getOptionalColumn(resultSet, 'difficulty', '初级');
+      const coverColor = this.getOptionalColumn(resultSet, 'cover_color', '["#a8edea", "#fed6e3"]');
+      const icon = this.getOptionalColumn(resultSet, 'icon', '📓');
 
-      const count = await this.getUserWordBookWordCount(bookId);
       const book: UserWordBook = {
         id: bookId,
         name: name,
         description: description || '用户自定义词书',
-        wordCount: count,
+        wordCount: 0, // Will be filled in batch
         isUserCreated: true,
         createdAt: createdAt,
         updatedAt: updatedAt,
@@ -74,11 +86,62 @@ export class WordBookRepository extends BaseRepository {
       books.push(book);
     }
     resultSet.close();
+
+    // Batch fetch all word counts to avoid N+1 query problem
+    if (books.length > 0) {
+      try {
+        const counts = await this.getUserWordBookWordCountsBatch(bookIds);
+        for (let i = 0; i < books.length; i++) {
+          books[i].wordCount = counts[books[i].id] || 0;
+        }
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        console.error(`[WordBookRepository] Failed to fetch word counts in batch: ${errMsg}`);
+        // Fallback to individual queries
+        for (const book of books) {
+          book.wordCount = await this.getUserWordBookWordCount(book.id);
+        }
+      }
+    }
+
+    const elapsedMs = Date.now() - startMs;
+    console.info(`[WordBookRepository] Fetched ${books.length} word books in ${elapsedMs}ms`);
     return books;
+  }
+
+  /**
+   * Batch fetch word counts for multiple books to avoid N+1 query problem
+   */
+  private async getUserWordBookWordCountsBatch(bookIds: string[]): Promise<Record<string, number>> {
+    if (bookIds.length === 0) {
+      return {};
+    }
+
+    console.info(`[WordBookRepository] Batch fetching word counts for ${bookIds.length} books`);
+    const counts: Record<string, number> = {};
+
+    // Initialize all counts to 0
+    for (const id of bookIds) {
+      counts[id] = 0;
+    }
+
+    // Use SQL to count efficiently
+    const predicates = new relationalStore.RdbPredicates(TABLE_USER_WORD_BOOK_WORDS);
+    predicates.in('book_id', bookIds);
+    
+    const resultSet = await this.store!.query(predicates, ['book_id']);
+    while (resultSet.goToNextRow()) {
+      const bookId = resultSet.getString(resultSet.getColumnIndex('book_id'));
+      counts[bookId] = (counts[bookId] || 0) + 1;
+    }
+    resultSet.close();
+
+    return counts;
   }
 
   async getUserWordBookById(bookId: string): Promise<UserWordBook | null> {
     this.ensureInitialized();
+    console.info(`[WordBookRepository] Fetching word book by id: ${bookId}`);
 
     const predicates = new relationalStore.RdbPredicates(TABLE_USER_WORD_BOOKS);
     predicates.equalTo('id', bookId);
@@ -86,23 +149,20 @@ export class WordBookRepository extends BaseRepository {
 
     try {
       if (!resultSet.goToFirstRow()) {
+        console.info(`[WordBookRepository] Word book not found: ${bookId}`);
         return null;
       }
 
       const name = resultSet.getString(resultSet.getColumnIndex('name'));
       const createdAt = Number(resultSet.getLong(resultSet.getColumnIndex('created_at')));
       const updatedAt = Number(resultSet.getLong(resultSet.getColumnIndex('updated_at')));
-      let description = '';
-      let category = '其他';
-      let difficulty = '初级';
-      let coverColor = '["#a8edea", "#fed6e3"]';
-      let icon = '📓';
 
-      try { description = resultSet.getString(resultSet.getColumnIndex('description')); } catch (e) { }
-      try { category = resultSet.getString(resultSet.getColumnIndex('category')); } catch (e) { }
-      try { difficulty = resultSet.getString(resultSet.getColumnIndex('difficulty')); } catch (e) { }
-      try { coverColor = resultSet.getString(resultSet.getColumnIndex('cover_color')); } catch (e) { }
-      try { icon = resultSet.getString(resultSet.getColumnIndex('icon')); } catch (e) { }
+      // Use helper for optional columns
+      const description = this.getOptionalColumn(resultSet, 'description', '');
+      const category = this.getOptionalColumn(resultSet, 'category', '其他');
+      const difficulty = this.getOptionalColumn(resultSet, 'difficulty', '初级');
+      const coverColor = this.getOptionalColumn(resultSet, 'cover_color', '["#a8edea", "#fed6e3"]');
+      const icon = this.getOptionalColumn(resultSet, 'icon', '📓');
 
       const count = await this.getUserWordBookWordCount(bookId);
       const book: UserWordBook = {
@@ -128,7 +188,9 @@ export class WordBookRepository extends BaseRepository {
     this.ensureInitialized();
     const predicates = new relationalStore.RdbPredicates(TABLE_USER_WORD_BOOK_WORDS);
     predicates.equalTo('book_id', bookId);
-    const resultSet = await this.store!.query(predicates);
+    
+    // More efficient: just fetch one column instead of all
+    const resultSet = await this.store!.query(predicates, ['book_id']);
     let count = 0;
     while (resultSet.goToNextRow()) {
       count++;

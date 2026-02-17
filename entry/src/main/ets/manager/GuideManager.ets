@@ -42,9 +42,14 @@ export class GuideManager {
     try {
       const json = await this.prefs.get(GuideManager.ONBOARDING_STATE_KEY, '');
       if (typeof json === 'string' && json.length > 0) {
-        return JSON.parse(json) as OnboardingState;
+        const state = JSON.parse(json) as OnboardingState;
+        console.info('[GuideManager] Onboarding state loaded successfully');
+        return state;
       }
-    } catch (e) {}
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      console.error(`[GuideManager] Failed to load onboarding state: ${errMsg}`);
+    }
     return this.getDefaultState();
   }
 
@@ -81,12 +86,17 @@ export class GuideManager {
 
   private async saveState(state: OnboardingState): Promise<void> {
     if (this.prefs === null) {
+      console.warn('[GuideManager] Cannot save state: preferences not initialized');
       return;
     }
     try {
       await this.prefs.put(GuideManager.ONBOARDING_STATE_KEY, JSON.stringify(state));
       await this.prefs.flush();
-    } catch (e) {}
+      console.info('[GuideManager] Onboarding state saved successfully');
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      console.error(`[GuideManager] Failed to save onboarding state: ${errMsg}`);
+    }
   }
 
   private getDefaultState(): OnboardingState {
