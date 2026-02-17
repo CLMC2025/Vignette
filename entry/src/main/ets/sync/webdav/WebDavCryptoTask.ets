@@ -11,11 +11,11 @@ export async function decryptPayload(payloadJson: string, password: string): Pro
 }
 
 @Concurrent
-export async function stringifyJson(obj: Record<string, Object>): Promise<string> {
+export async function stringifyJson(obj: object): Promise<string> {
   return JSON.stringify(obj);
 }
 
 @Concurrent
-export async function parseJson(json: string): Promise<Record<string, Object>> {
-  return JSON.parse(json) as Record<string, Object>;
+export async function parseJson(json: string): Promise<object> {
+  return JSON.parse(json) as object;
 }

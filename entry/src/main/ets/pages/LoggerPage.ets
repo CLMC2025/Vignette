@@ -6,6 +6,7 @@ import { ColorsInterface } from '../model/TokenInterfaces';
 import { ThemeManager } from '../manager/ThemeManager';
 import { logger, LogStats, LogEntry, LogLevel } from '../utils/Logger';
 import { DataFileTransfer } from '../sync/DataFileTransfer';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 
 interface LevelFilterOption {
   level: LogLevel | null;
@@ -21,6 +22,7 @@ struct LoggerPage {
   @State searchKeyword: string = '';
   @State selectedLevelIndex: number = 0;
   @State displayedLogs: LogEntry[] = [];
+  @State enableHilog: boolean = true;
   @State enablePersistence: boolean = false;
   @State persistenceIncludeInfo: boolean = false;
   @State persistenceMaxMB: number = 2;
@@ -52,9 +54,16 @@ struct LoggerPage {
       this.displayedLogs = logger.getRecentLogs(this.PREVIEW_COUNT);
     }
     this.logStats = logger.getStats();
+    this.enableHilog = logger.isHilogEnabled();
     this.enablePersistence = logger.isPersistenceEnabled();
     this.persistenceIncludeInfo = logger.getPersistenceIncludeInfo();
     this.persistenceMaxMB = logger.getPersistenceMaxBytesInMB();
+  }
+
+  private updateHilogEnabled(value: boolean): void {
+    this.enableHilog = value;
+    const context = getContext(this) as common.UIAbilityContext;
+    logger.setEnableHilog(value, context);
   }
 
   private updatePersistenceEnabled(value: boolean): void {
@@ -234,6 +243,77 @@ struct LoggerPage {
     }
     .width('100%')
     .padding({ bottom: DesignTokens.Spacing.SM })
+  }
+
+  @Builder
+  private buildOutputCard() {
+    Column() {
+      Text('日志输出')
+        .fontSize(DesignTokens.Typography.FONT_SIZE_BASE)
+        .fontWeight(DesignTokens.Typography.FONT_WEIGHT_BOLD)
+        .fontColor(this.colors.TEXT_PRIMARY)
+        .width('100%')
+
+      Text('配置日志输出渠道，HiLog 可在 DevEco Studio 中实时查看。')
+        .fontSize(DesignTokens.Typography.FONT_SIZE_SM)
+        .fontColor(this.colors.TEXT_SECONDARY)
+        .width('100%')
+        .margin({ top: 6, bottom: DesignTokens.Spacing.MD })
+
+      Row() {
+        Column() {
+          Text('HiLog 输出')
+            .fontSize(DesignTokens.Typography.FONT_SIZE_BASE)
+            .fontColor(this.colors.TEXT_PRIMARY)
+          Text('输出到系统日志，在 IDE 中查看')
+            .fontSize(DesignTokens.Typography.FONT_SIZE_SM)
+            .fontColor(this.colors.TEXT_TERTIARY)
+            .margin({ top: 4 })
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        Toggle({ type: ToggleType.Switch, isOn: this.enableHilog })
+          .selectedColor(this.colors.PRIMARY)
+          .switchPointColor(this.colors.WHITE)
+          .onChange((value: boolean) => {
+            this.updateHilogEnabled(value);
+          })
+      }
+      .width('100%')
+      .margin({ bottom: DesignTokens.Spacing.MD })
+
+      Row() {
+        Column() {
+          Text('测试 HiLog')
+            .fontSize(DesignTokens.Typography.FONT_SIZE_BASE)
+            .fontColor(this.colors.TEXT_PRIMARY)
+          Text('发送一条测试日志到 HiLog')
+            .fontSize(DesignTokens.Typography.FONT_SIZE_SM)
+            .fontColor(this.colors.TEXT_TERTIARY)
+            .margin({ top: 4 })
+        }
+        .layoutWeight(1)
+        .alignItems(HorizontalAlign.Start)
+
+        Button('发送')
+          .fontSize(DesignTokens.Typography.FONT_SIZE_SM)
+          .fontColor(this.colors.WHITE)
+          .backgroundColor(this.colors.PRIMARY)
+          .borderRadius(DesignTokens.BorderRadius.MD)
+          .height(32)
+          .onClick(() => {
+            hilog.info(0x6539, 'Vignette', 'HiLog 测试日志 - 时间: %{public}s', new Date().toLocaleTimeString());
+            promptAction.showToast({ message: '测试日志已发送', duration: 1500 });
+          })
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding(DesignTokens.Spacing.MD)
+    .margin({ bottom: DesignTokens.Spacing.MD })
+    .backgroundColor(this.colors.SURFACE_PRIMARY)
+    .borderRadius(DesignTokens.BorderRadius.LG)
   }
 
   @Builder
@@ -523,6 +603,7 @@ struct LoggerPage {
 
       Column() {
         this.buildStatsBar()
+        this.buildOutputCard()
         this.buildPersistenceCard()
         this.buildFilterTabs()
         this.buildSearchBar()

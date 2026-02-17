@@ -74,11 +74,15 @@ export class WebDavEventsSync {
       return WebDavSyncResult.ok('没有新的复习记录需要上传');
     }
 
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
     const headRes = await client.head(remoteFile);
     if (headRes.statusCode >= 400 && headRes.statusCode !== 404) {
       return WebDavSyncResult.fail('上传复习记录失败', `HEAD ${headRes.statusCode}: ${headRes.body}`);
     }
     const etag = safeTrim(headRes.headers['etag'] ?? '');
+
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
     let mergedJsonl = '';
     if (headRes.statusCode === 404) {
@@ -97,11 +101,18 @@ export class WebDavEventsSync {
       mergedJsonl = `${remotePlain}${this.serializeEventsJsonl(events)}`;
     }
 
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
     const enc = await WebDavCrypto.encryptUtf8Offloaded(mergedJsonl, settings.syncPassword);
+    
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    
     const putRes = await client.put(remoteFile, enc, 'application/json', etag.length > 0 ? { 'If-Match': etag } : {});
     if (putRes.statusCode < 200 || putRes.statusCode >= 300) {
       return WebDavSyncResult.fail('上传复习记录失败', `PUT ${putRes.statusCode}: ${putRes.body}`);
     }
+
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
     // Advance sync cursor to last event timestamp
     let maxTs = manifest.lastEventsSyncMs;
@@ -124,6 +135,8 @@ export class WebDavEventsSync {
   ): Promise<WebDavSyncResult> {
     const headRes = await client.head(remoteFile);
     
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    
     const conflict = WebDavConflictResolver.checkEventsDownload(headRes, manifest);
     if (conflict) {
       return conflict;
@@ -133,6 +146,8 @@ export class WebDavEventsSync {
     if (getRes.statusCode < 200 || getRes.statusCode >= 300) {
       return WebDavSyncResult.fail('拉取复习记录失败', `GET ${getRes.statusCode}: ${getRes.body}`);
     }
+    
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
     
     let plain = '';
     try {
@@ -147,7 +162,12 @@ export class WebDavEventsSync {
       return WebDavSyncResult.fail('解密复习记录失败', userFriendlyMsg);
     }
     
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    
     const events = this.parseEventsJsonl(plain);
+    
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    
     const inserted = await this.db.insertReviewEvents(events);
     manifest.eventsAllEtag = safeTrim(headRes.headers['etag'] ?? '');
     await this.store.saveManifestJson(manifest.toJSON());

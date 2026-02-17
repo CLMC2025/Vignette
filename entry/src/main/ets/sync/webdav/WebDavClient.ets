@@ -38,16 +38,48 @@ export class WebDavClient implements IWebDavBackend {
     return this.request(http.RequestMethod.HEAD, path, {}, undefined);
   }
 
-  async put(path: string, body: string, contentType: string = 'application/octet-stream', extraHeaders: Record<string, string> = {}): Promise<WebDavResponse> {
+  async put(path: string, body: string, contentType: string = 'application/octet-stream', extraHeaders: Record<string, string> = {}, ensureDir: boolean = true): Promise<WebDavResponse> {
     const headers: Record<string, string> = { 'Content-Type': contentType };
     Object.keys(extraHeaders).forEach((key: string) => {
       headers[key] = extraHeaders[key];
     });
+
+    // 自动创建父目录
+    if (ensureDir) {
+      await this.ensureParentExists(path);
+    }
+
     return this.request(http.RequestMethod.PUT, path, headers, body);
+  }
+
+  private async ensureParentExists(path: string): Promise<void> {
+    const lastSlash = path.lastIndexOf('/');
+    if (lastSlash <= 0) return;
+
+    const parent = path.substring(0, lastSlash);
+    if (parent.length === 0 || parent === '/') return;
+
+    try {
+      const headRes = await this.head(parent);
+      if (headRes.statusCode === 404) {
+        // 递归创建父目录
+        await this.ensureParentExists(parent);
+        await this.mkcol(parent);
+      }
+    } catch (e) {
+      // 忽略检查错误，让 PUT 自己失败
+    }
   }
 
   async delete(path: string): Promise<WebDavResponse> {
     return this.request(http.RequestMethod.DELETE, path, {}, undefined);
+  }
+
+  async mkcol(path: string): Promise<WebDavResponse> {
+    // 使用 PUT 创建目录（WebDAV 服务器通常支持 PUT 到目录路径）
+    // 或者尝试 PUT 一个空文件到 .keep 文件来创建目录
+    const keepFile = path.endsWith('/') ? `${path}.keep` : `${path}/.keep`;
+    return this.request(http.RequestMethod.PUT, keepFile, { 'Content-Type': 'text/plain' }, '');
   }
 
   private buildUrl(path: string): string {

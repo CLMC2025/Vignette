@@ -323,6 +323,18 @@ export class DBManager {
     return this.wordRepo.getLearningWords(limit, excludeWord);
   }
 
+  async getWordCount(): Promise<number> {
+    return this.wordRepo.getWordCount();
+  }
+
+  async getWordsPaged(limit: number, offset: number): Promise<WordItem[]> {
+    return this.wordRepo.getWordsPaged(limit, offset);
+  }
+
+  async getLearnedWordsPaged(limit: number, offset: number): Promise<WordItem[]> {
+    return this.wordRepo.getLearnedWordsPaged(limit, offset);
+  }
+
   // ==================== DEFINITION CACHE OPERATIONS ====================
 
   async cacheDefinition(word: string, definition: WordDefinition): Promise<void> {

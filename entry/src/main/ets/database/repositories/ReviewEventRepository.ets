@@ -67,7 +67,8 @@ export class ReviewEventRepository extends BaseRepository {
     let inserted = 0;
     await this.store!.executeSql('BEGIN TRANSACTION');
     try {
-      for (const e of events) {
+      for (let i = 0; i < events.length; i++) {
+        const e = events[i];
         const bucket: relationalStore.ValuesBucket = {
           'id': e.id,
           'word_id': e.wordId,
@@ -88,6 +89,11 @@ export class ReviewEventRepository extends BaseRepository {
           if (msg.includes('UNIQUE constraint failed') || msg.includes('PRIMARY KEY')) {
             continue;
           }
+        }
+
+        // 每 50 条记录 yield 一次，避免阻塞 UI
+        if (i % 50 === 0 && i > 0) {
+          await new Promise<void>((resolve) => setTimeout(resolve, 0));
         }
       }
       await this.store!.executeSql('COMMIT');

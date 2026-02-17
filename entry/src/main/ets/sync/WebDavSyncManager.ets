@@ -26,6 +26,32 @@ import { WebDavBackupManager } from './webdav/WebDavBackupManager';
 import { WebDavEventsSync } from './webdav/WebDavEventsSync';
 import { WebDavModelSync } from './webdav/WebDavModelSync';
 import { WebDavIncrementalSync } from './webdav/WebDavIncrementalSync';
+import taskpool from '@ohos.taskpool';
+import { 
+  executeBackupUpload, 
+  executeDownload, 
+  executeUpload,
+  BackupTaskParams, 
+  BackupTaskResult,
+  DownloadTaskParams,
+  DownloadTaskResult,
+  UploadTaskParams,
+  UploadTaskResult
+} from './webdav/WebDavSyncTask';
+import { WebDavCrypto } from './webdav/WebDavCrypto';
+
+// 复习事件行接口
+interface ReviewEventRow {
+  id: string;
+  wordId: number;
+  rating: number;
+  timestamp: number;
+  prevStateJson: string;
+  newStateJson: string;
+  errorTag: string;
+  reflection: string;
+  scheduledDays: number;
+}
 
 export { 
   WebDavSyncStatus, 
@@ -273,6 +299,23 @@ export class WebDavSyncManager {
       return null;
     }
 
+    // 目录不存在，尝试创建
+    if (rootHead.statusCode === 404) {
+      console.info(`[WebDavSyncManager] Remote directory ${remoteRoot} not found, trying to create it`);
+      const createResult = await this.ensureRemoteDirectory(client, remoteRoot);
+      if (createResult !== null) {
+        return createResult;
+      }
+      // 创建成功，重新检查
+      const recheckHead = await client.head(remoteRoot);
+      if (this.isCollectionReachable(recheckHead.statusCode)) {
+        this.remoteLayoutKey = key;
+        this.remoteLayoutBase = remoteRoot;
+        this.remoteLayoutPrefix = '';
+        return null;
+      }
+    }
+
     const probeRemoteRoot = await this.probeCollectionWritable(client, remoteRoot);
     if (probeRemoteRoot === null) {
       this.remoteLayoutKey = key;
@@ -294,6 +337,43 @@ export class WebDavSyncManager {
     this.remoteLayoutBase = '/';
     this.remoteLayoutPrefix = prefix;
     return null;
+  }
+
+  /**
+   * 确保远程目录存在，如果不存在则创建
+   */
+  private async ensureRemoteDirectory(client: IWebDavBackend, path: string): Promise<WebDavSyncResult | null> {
+    try {
+      // 递归创建父目录
+      const lastSlash = path.lastIndexOf('/');
+      if (lastSlash > 0) {
+        const parent = path.substring(0, lastSlash);
+        if (parent.length > 0 && parent !== '/') {
+          const parentHead = await client.head(parent);
+          if (parentHead.statusCode === 404) {
+            const parentResult = await this.ensureRemoteDirectory(client, parent);
+            if (parentResult !== null) {
+              return parentResult;
+            }
+          }
+        }
+      }
+
+      // 创建当前目录（通过 PUT 一个 .keep 文件）
+      const keepFile = path.endsWith('/') ? `${path}.keep` : `${path}/.keep`;
+      const putRes = await client.put(keepFile, 'keep', 'text/plain');
+      if (putRes.statusCode >= 200 && putRes.statusCode < 300) {
+        console.info(`[WebDavSyncManager] Created remote directory: ${path}`);
+        return null;
+      }
+      if (putRes.statusCode === 401 || putRes.statusCode === 403) {
+        return WebDavSyncResult.fail('创建目录失败', `权限不足: ${putRes.statusCode}`);
+      }
+      return WebDavSyncResult.fail('创建目录失败', `PUT ${putRes.statusCode}: ${putRes.body}`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return WebDavSyncResult.fail('创建目录失败', msg);
+    }
   }
 
   async testConnection(): Promise<WebDavSyncResult> {
@@ -589,94 +669,294 @@ export class WebDavSyncManager {
     const missing = this.requireConfigured();
     if (missing !== null) return missing;
 
-    this.status = WebDavSyncStatus.SYNCING;
-    let currentStep: string = '初始化';
-    try {
-      const client = this.createClient();
-      const preflight = await this.preflightRemoteRoot(client);
-      if (preflight !== null) {
-        this.status = WebDavSyncStatus.ERROR;
-        return preflight;
-      }
-
-      currentStep = '单词下载';
-      const downloadResult = await this.withTimeout(
-        this.incrementalSync.downloadAndMergeWordsDelta(
-          client,
-          this.settings,
-          this.manifest,
-          this.wordsDeltaFilePath()
-        ),
-        60000,
-        '下载单词增量超时'
-      );
-      if (!downloadResult.success) {
-        this.status = WebDavSyncStatus.ERROR;
-        return this.buildIncrementalStepFailure('单词下载', downloadResult);
-      }
-
-      currentStep = '单词上传';
-      const uploadResult = await this.withTimeout(
-        this.incrementalSync.uploadWordsDelta(
-          client,
-          this.settings,
-          this.manifest,
-          this.wordsDeltaFilePath()
-        ),
-        60000,
-        '上传单词增量超时'
-      );
-      if (!uploadResult.success) {
-        this.status = WebDavSyncStatus.ERROR;
-        return this.buildIncrementalStepFailure('单词上传', uploadResult);
-      }
-
-      currentStep = '事件下载';
-      const eventsDownloadResult = await this.withTimeout(
-        this.eventsSync.downloadAndMergeRemoteEvents(
-          client,
-          this.settings,
-          this.manifest,
-          this.eventsFilePath()
-        ),
-        60000,
-        '下载复习记录超时'
-      );
-      if (!eventsDownloadResult.success) {
-        this.status = WebDavSyncStatus.ERROR;
-        return this.buildIncrementalStepFailure('事件下载', eventsDownloadResult);
-      }
-
-      currentStep = '事件上传';
-      const eventsUploadResult = await this.withTimeout(
-        this.eventsSync.uploadLocalReviewEvents(
-          client,
-          this.settings,
-          this.manifest,
-          this.eventsFilePath()
-        ),
-        60000,
-        '上传复习记录超时'
-      );
-      if (!eventsUploadResult.success) {
-        this.status = WebDavSyncStatus.ERROR;
-        return this.buildIncrementalStepFailure('事件上传', eventsUploadResult);
-      }
-
-      this.status = WebDavSyncStatus.IDLE;
-
-      const parts: string[] = [];
-      parts.push(`单词下载：${downloadResult.message}`);
-      parts.push(`单词上传：${uploadResult.message}`);
-      parts.push(`事件下载：${eventsDownloadResult.message}`);
-      parts.push(`事件上传：${eventsUploadResult.message}`);
-
-      return WebDavSyncResult.ok(parts.length > 0 ? parts.join('；') : '同步完成，无新数据');
-    } catch (e) {
-      this.status = WebDavSyncStatus.ERROR;
-      const msg = e instanceof Error ? e.message : String(e);
-      return WebDavSyncResult.fail('增量同步失败', `STEP ${currentStep}: ${msg}`);
+    // 检查是否已经在同步中
+    if (this.status === WebDavSyncStatus.SYNCING) {
+      return WebDavSyncResult.fail('同步操作正在进行中', '请等待当前同步完成后再试');
     }
+
+    this.status = WebDavSyncStatus.SYNCING;
+
+    // 先确保远程目录存在
+    const client = this.createClient();
+    const preflight = await this.preflightRemoteRoot(client);
+    if (preflight !== null) {
+      this.status = WebDavSyncStatus.ERROR;
+      return preflight;
+    }
+
+    // yield 给 UI 线程
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    try {
+      const syncManager = DataSyncManager.getInstance();
+      const dbManager = DBManager.getInstance();
+
+      // ========== 步骤 1: 单词下载 ==========
+      console.info('[WebDavSyncManager] Step 1: Download words delta');
+      const downloadParams: DownloadTaskParams = {
+        endpoint: this.settings.endpoint,
+        username: this.settings.username,
+        password: this.settings.password,
+        syncPassword: this.settings.syncPassword,
+        remoteRoot: this.settings.remoteRoot,
+        manifestJson: this.manifest.toJSON(),
+        remoteFile: this.wordsDeltaFilePath()
+      };
+      const downloadResult = await taskpool.execute(new taskpool.Task(executeDownload, downloadParams)) as DownloadTaskResult;
+
+      if (!downloadResult.success) {
+        return WebDavSyncResult.fail('增量同步失败（单词下载）', downloadResult.detail);
+      }
+
+      // yield 给 UI 线程
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+      // 如果有数据，导入单词
+      if (downloadResult.data.length > 0) {
+        const importResult = await syncManager.importIncremental(downloadResult.data);
+        if (importResult.hasErrors()) {
+          return WebDavSyncResult.fail('增量同步失败（单词下载）', importResult.errors.join('; '));
+        }
+      }
+
+      // yield 给 UI 线程
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+      // ========== 步骤 2: 单词上传 ==========
+      console.info('[WebDavSyncManager] Step 2: Upload words delta');
+      const exportResult = await syncManager.exportIncremental(this.manifest.lastWordsSyncMs, false);
+      if (!exportResult.success) {
+        return WebDavSyncResult.fail('增量同步失败（单词上传）', exportResult.error);
+      }
+
+      // yield 给 UI 线程
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+      if (exportResult.data.length > 0) {
+        // 加密数据
+        const enc = await WebDavCrypto.encryptUtf8Async(exportResult.data, this.settings.syncPassword);
+
+        // yield 给 UI 线程
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        const uploadParams: UploadTaskParams = {
+          endpoint: this.settings.endpoint,
+          username: this.settings.username,
+          password: this.settings.password,
+          syncPassword: this.settings.syncPassword,
+          remoteRoot: this.settings.remoteRoot,
+          manifestJson: this.manifest.toJSON(),
+          remoteFile: this.wordsDeltaFilePath(),
+          data: enc
+        };
+        const uploadResult = await taskpool.execute(new taskpool.Task(executeUpload, uploadParams)) as UploadTaskResult;
+
+        if (!uploadResult.success) {
+          return WebDavSyncResult.fail('增量同步失败（单词上传）', uploadResult.detail);
+        }
+      }
+
+      // yield 给 UI 线程
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+      // ========== 步骤 3: 事件下载 ==========
+      console.info('[WebDavSyncManager] Step 3: Download events');
+      const eventsDownloadParams: DownloadTaskParams = {
+        endpoint: this.settings.endpoint,
+        username: this.settings.username,
+        password: this.settings.password,
+        syncPassword: this.settings.syncPassword,
+        remoteRoot: this.settings.remoteRoot,
+        manifestJson: this.manifest.toJSON(),
+        remoteFile: this.eventsFilePath()
+      };
+      const eventsDownloadResult = await taskpool.execute(new taskpool.Task(executeDownload, eventsDownloadParams)) as DownloadTaskResult;
+
+      if (!eventsDownloadResult.success) {
+        return WebDavSyncResult.fail('增量同步失败（事件下载）', eventsDownloadResult.detail);
+      }
+
+      // yield 给 UI 线程
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+      // 如果有数据，导入事件
+      if (eventsDownloadResult.data.length > 0) {
+        const events = this.parseEventsJsonl(eventsDownloadResult.data);
+        await dbManager.insertReviewEvents(events);
+      }
+
+      // yield 给 UI 线程
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+      // ========== 步骤 4: 事件上传 ==========
+      console.info('[WebDavSyncManager] Step 4: Upload events');
+      const events = await dbManager.getReviewEventsAfter(this.manifest.lastEventsSyncMs);
+
+      // yield 给 UI 线程
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+      if (events.length > 0) {
+        const eventsJsonl = this.serializeEventsJsonl(events);
+
+        // yield 给 UI 线程
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        const enc = await WebDavCrypto.encryptUtf8Async(eventsJsonl, this.settings.syncPassword);
+
+        // yield 给 UI 线程
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        const eventsUploadParams: UploadTaskParams = {
+          endpoint: this.settings.endpoint,
+          username: this.settings.username,
+          password: this.settings.password,
+          syncPassword: this.settings.syncPassword,
+          remoteRoot: this.settings.remoteRoot,
+          manifestJson: this.manifest.toJSON(),
+          remoteFile: this.eventsFilePath(),
+          data: enc
+        };
+        const eventsUploadResult = await taskpool.execute(new taskpool.Task(executeUpload, eventsUploadParams)) as UploadTaskResult;
+
+        if (!eventsUploadResult.success) {
+          return WebDavSyncResult.fail('增量同步失败（事件上传）', eventsUploadResult.detail);
+        }
+      }
+
+      return WebDavSyncResult.ok('同步完成');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return WebDavSyncResult.fail('增量同步失败', msg);
+    } finally {
+      // 确保状态总是重置为 IDLE
+      this.status = WebDavSyncStatus.IDLE;
+    }
+  }
+
+  /**
+   * 在 TaskPool 中执行备份（后台执行，不阻塞 UI）
+   */
+  async backupToCloudInBackground(): Promise<WebDavSyncResult> {
+    const missing = this.requireConfigured();
+    if (missing !== null) return missing;
+
+    // 检查是否已经在同步中
+    if (this.status === WebDavSyncStatus.SYNCING) {
+      return WebDavSyncResult.fail('同步操作正在进行中', '请等待当前同步完成后再试');
+    }
+
+    this.status = WebDavSyncStatus.SYNCING;
+
+    // 先确保远程目录存在
+    const client = this.createClient();
+    const preflight = await this.preflightRemoteRoot(client);
+    if (preflight !== null) {
+      this.status = WebDavSyncStatus.ERROR;
+      return preflight;
+    }
+
+    // yield 给 UI 线程
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    try {
+      const syncManager = DataSyncManager.getInstance();
+
+      // 导出数据（在主线程执行，需要数据库）
+      console.info('[WebDavSyncManager] Exporting data');
+      const exportResult = await syncManager.exportData();
+      if (!exportResult.success) {
+        return WebDavSyncResult.fail('备份失败', exportResult.error);
+      }
+
+      // yield 给 UI 线程
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+      // 加密数据（在主线程执行）
+      console.info('[WebDavSyncManager] Encrypting data');
+      const enc = await WebDavCrypto.encryptUtf8Async(exportResult.data, this.settings.syncPassword);
+
+      // yield 给 UI 线程
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+      // 上传数据（在 TaskPool 中执行）
+      console.info('[WebDavSyncManager] Uploading data');
+      const params: BackupTaskParams = {
+        endpoint: this.settings.endpoint,
+        username: this.settings.username,
+        password: this.settings.password,
+        syncPassword: this.settings.syncPassword,
+        remoteRoot: this.settings.remoteRoot,
+        manifestJson: this.manifest.toJSON(),
+        backupFilePath: this.backupFilePath(),
+        backupData: enc
+      };
+
+      const task = new taskpool.Task(executeBackupUpload, params);
+      const result = await taskpool.execute(task) as BackupTaskResult;
+
+      if (result.success) {
+        return WebDavSyncResult.ok(result.message);
+      } else {
+        return WebDavSyncResult.fail('备份失败', result.detail);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return WebDavSyncResult.fail('备份失败', msg);
+    } finally {
+      // 确保状态总是重置为 IDLE
+      this.status = WebDavSyncStatus.IDLE;
+    }
+  }
+
+  // 序列化事件为 JSON Lines
+  private serializeEventsJsonl(events: ReviewEventRow[]): string {
+    let out = '';
+    for (const e of events) {
+      // 使用 Record<string, Object> 类型来避免对象字面量类型检查问题
+      const obj: Record<string, Object> = {
+        'id': e.id,
+        'wordId': e.wordId,
+        'rating': e.rating,
+        'timestamp': e.timestamp,
+        'prevStateJson': e.prevStateJson,
+        'newStateJson': e.newStateJson,
+        'errorTag': e.errorTag,
+        'reflection': e.reflection,
+        'scheduledDays': e.scheduledDays
+      };
+      out += `${JSON.stringify(obj)}\n`;
+    }
+    return out;
+  }
+
+  // 解析 JSON Lines
+  private parseEventsJsonl(jsonl: string): ReviewEventRow[] {
+    const lines = jsonl.split(/\r?\n/);
+    const out: ReviewEventRow[] = [];
+    for (const line of lines) {
+      const s = line.trim();
+      if (s.length === 0) continue;
+      try {
+        const obj = JSON.parse(s) as Record<string, string | number>;
+        const row: ReviewEventRow = {
+          id: (obj['id'] as string) ?? '',
+          wordId: (obj['wordId'] as number) ?? 0,
+          rating: (obj['rating'] as number) ?? 0,
+          timestamp: (obj['timestamp'] as number) ?? 0,
+          prevStateJson: (obj['prevStateJson'] as string) ?? '{}',
+          newStateJson: (obj['newStateJson'] as string) ?? '{}',
+          errorTag: (obj['errorTag'] as string) ?? '',
+          reflection: (obj['reflection'] as string) ?? '',
+          scheduledDays: (obj['scheduledDays'] as number) ?? 0
+        };
+        if (row.id.length > 0 && row.wordId > 0 && row.timestamp > 0) {
+          out.push(row);
+        }
+      } catch (e) {
+        // skip malformed line
+      }
+    }
+    return out;
   }
 
   private buildIncrementalStepFailure(step: string, result: WebDavSyncResult): WebDavSyncResult {

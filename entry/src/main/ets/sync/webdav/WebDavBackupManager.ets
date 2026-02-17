@@ -37,6 +37,8 @@ export class WebDavBackupManager {
       console.warn(`[WebDAV] backup data too large: ${dataSize} bytes`);
     }
 
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
     const encStartMs = Date.now();
     const enc = await WebDavCrypto.encryptUtf8Offloaded(exportResult.data, settings.syncPassword);
     const encElapsedMs = Date.now() - encStartMs;
@@ -52,6 +54,8 @@ export class WebDavBackupManager {
     if (putRes.statusCode < 200 || putRes.statusCode >= 300) {
       return WebDavSyncResult.fail('上传失败', `PUT ${putRes.statusCode}: ${putRes.body}`);
     }
+
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
     const headRes = await client.head(remoteFile);
     manifest.lastBackupUploadMs = Date.now();

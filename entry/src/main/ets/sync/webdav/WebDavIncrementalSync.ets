@@ -28,6 +28,8 @@ export class WebDavIncrementalSync {
       return WebDavSyncResult.ok('没有新的单词数据需要同步');
     }
 
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
     let data: Record<string, Object[]> | null = null;
     try {
       data = JSON.parse(exportResult.data) as Record<string, Object[]>;
@@ -45,11 +47,18 @@ export class WebDavIncrementalSync {
       return WebDavSyncResult.ok('没有新的单词数据需要同步');
     }
 
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
     const enc = await WebDavCrypto.encryptUtf8Offloaded(exportResult.data, settings.syncPassword);
+    
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    
     const putRes = await client.put(remoteFile, enc, 'application/json');
     if (putRes.statusCode < 200 || putRes.statusCode >= 300) {
       return WebDavSyncResult.fail('上传增量数据失败', `PUT ${putRes.statusCode}: ${putRes.body}`);
     }
+
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
     const headRes = await client.head(remoteFile);
     manifest.lastWordsSyncMs = Date.now();
@@ -73,6 +82,8 @@ export class WebDavIncrementalSync {
       return WebDavSyncResult.fail('获取单词增量信息失败', `HEAD ${headRes.statusCode}`);
     }
 
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
     const etag = safeTrim(headRes.headers['etag'] ?? '');
     if (etag.length > 0 && etag === manifest.wordsDeltaEtag) {
       return WebDavSyncResult.ok('单词增量数据已是最新');
@@ -83,6 +94,8 @@ export class WebDavIncrementalSync {
       return WebDavSyncResult.fail('下载单词增量失败', `GET ${getRes.statusCode}`);
     }
 
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
     let plain = '';
     try {
       plain = await WebDavCrypto.decryptUtf8Offloaded(getRes.body, settings.syncPassword);
@@ -90,6 +103,8 @@ export class WebDavIncrementalSync {
       const msg = ce instanceof CryptoError ? ce.message : String(ce);
       return WebDavSyncResult.fail('解密单词增量失败', msg);
     }
+
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
     const importResult = await this.syncManager.importIncremental(plain);
     if (importResult.hasErrors()) {

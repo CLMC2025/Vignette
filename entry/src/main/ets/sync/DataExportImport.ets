@@ -6,6 +6,8 @@
 import { VersionControl } from './VersionControl';
 import { WordItem } from '../model/WordModel';
 import { util } from '@kit.ArkTS';
+import taskpool from '@ohos.taskpool';
+import { stringifyJson } from './webdav/WebDavCryptoTask';
 
 /**
  * 导出的单词数据（智能同步释义：仅同步非 builtin 来源）
@@ -322,7 +324,6 @@ export class DataExportImport {
       for (const word of batch) {
         exportedWords.push(new ExportedWord(word));
       }
-      // 每处理一批后 yield，避免阻塞主线程
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
 
@@ -337,7 +338,14 @@ export class DataExportImport {
       fsrsParamsJson: fsrsParamsJson
     };
 
-    return JSON.stringify(obj);
+    try {
+      const task = new taskpool.Task(stringifyJson, obj);
+      const result = await taskpool.execute(task) as string;
+      return result;
+    } catch (e) {
+      console.error('[DataExportImport] Taskpool stringify failed, falling back to sync:', e);
+      return JSON.stringify(obj);
+    }
   }
 
   /**

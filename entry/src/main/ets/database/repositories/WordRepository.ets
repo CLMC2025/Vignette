@@ -609,6 +609,65 @@ export class WordRepository extends BaseRepository {
     }
     return definitions;
   }
+
+  async getWordCount(): Promise<number> {
+    this.ensureInitialized();
+
+    const predicates = new relationalStore.RdbPredicates(TABLE_WORDS);
+    const resultSet = await this.store!.query(predicates, ['COUNT(*) AS cnt']);
+
+    try {
+      if (resultSet.goToFirstRow()) {
+        return resultSet.getLong(resultSet.getColumnIndex('cnt'));
+      }
+      return 0;
+    } finally {
+      resultSet.close();
+    }
+  }
+
+  async getWordsPaged(limit: number, offset: number): Promise<WordItem[]> {
+    this.ensureInitialized();
+
+    const predicates = new relationalStore.RdbPredicates(TABLE_WORDS);
+    predicates.orderByAsc(WordColumns.ID);
+    predicates.limitAs(limit);
+    predicates.offsetAs(offset);
+
+    const resultSet = await this.store!.query(predicates);
+    const words: WordItem[] = [];
+
+    try {
+      while (resultSet.goToNextRow()) {
+        words.push(this.resultSetToWord(resultSet));
+      }
+    } finally {
+      resultSet.close();
+    }
+    return words;
+  }
+
+  async getLearnedWordsPaged(limit: number, offset: number): Promise<WordItem[]> {
+    this.ensureInitialized();
+
+    const predicates = new relationalStore.RdbPredicates(TABLE_WORDS);
+    predicates.notEqualTo(WordColumns.STATUS, WordStatus.NEW);
+    predicates.orderByAsc(WordColumns.ID);
+    predicates.limitAs(limit);
+    predicates.offsetAs(offset);
+
+    const resultSet = await this.store!.query(predicates);
+    const words: WordItem[] = [];
+
+    try {
+      while (resultSet.goToNextRow()) {
+        words.push(this.resultSetToWord(resultSet));
+      }
+    } finally {
+      resultSet.close();
+    }
+    return words;
+  }
 }
 
 export interface DefinitionCacheRow {

@@ -3,6 +3,7 @@ import { fileIo } from '@kit.CoreFileKit';
 import type common from '@ohos.app.ability.common';
 import deviceInfo from '@ohos.deviceInfo';
 import { display } from '@kit.ArkUI';
+import { hilog } from '@kit.PerformanceAnalysisKit';
 
 export enum LogLevel {
   DEBUG = 0,
@@ -56,6 +57,7 @@ interface LoggerConfig {
   minLevel: LogLevel;
   maxCacheSize: number;
   enableConsole: boolean;
+  enableHilog: boolean;
   enablePersistence: boolean;
   persistenceIncludeInfo: boolean;
   persistenceMaxBytes: number;
@@ -106,6 +108,7 @@ export class Logger {
   private readonly PERSISTENCE_PREF_KEY = 'logger_config';
   private readonly PERSISTENCE_DIR_NAME = 'logger';
   private readonly META_PREF_KEY = 'persistenceMeta';
+  private readonly HILOG_DOMAIN = 0x6539;
   private performanceTimers: Map<string, PerformanceTimer> = new Map();
   private deviceInfo: DeviceInfoData | null = null;
   private appVersion: string = '1.0.0';
@@ -117,6 +120,7 @@ export class Logger {
     minLevel: LogLevel.DEBUG,
     maxCacheSize: 500,
     enableConsole: true,
+    enableHilog: true,
     enablePersistence: false,
     persistenceIncludeInfo: false,
     persistenceMaxBytes: 2 * 1024 * 1024,
@@ -136,10 +140,11 @@ export class Logger {
   
   async initialize(context: common.UIAbilityContext, isProduction: boolean = false): Promise<void> {
     if (this.initialized) return;
-    
+
     if (isProduction) {
       this.config.minLevel = LogLevel.WARN;
       this.config.enableConsole = false;
+      this.config.enableHilog = false;
     }
     
     try {
@@ -147,6 +152,10 @@ export class Logger {
       const savedLevel = pref.get('minLevel', this.config.minLevel);
       if (typeof savedLevel === 'number') {
         this.config.minLevel = savedLevel;
+      }
+      const savedEnableHilog = pref.get('enableHilog', this.config.enableHilog);
+      if (typeof savedEnableHilog === 'boolean') {
+        this.config.enableHilog = savedEnableHilog;
       }
       const savedEnablePersistence = pref.get('enablePersistence', this.config.enablePersistence);
       if (typeof savedEnablePersistence === 'boolean') {
@@ -165,8 +174,8 @@ export class Logger {
         this.config.preloadRecentCount = savedPreloadCount;
       }
       const savedMeta = pref.get(this.META_PREF_KEY, '[]');
-      if (typeof savedMeta === 'string' && savedMeta.length > 0) {
-        this.persistenceMeta = this.parseMeta(savedMeta);
+      if (savedMeta !== undefined && savedMeta !== null && typeof savedMeta === 'string' && (savedMeta as string).length > 0) {
+        this.persistenceMeta = this.parseMeta(savedMeta as string);
       }
     } catch (e) {
       // 使用默认配置
@@ -242,6 +251,17 @@ export class Logger {
 
   getMaxCacheSize(): number {
     return this.config.maxCacheSize;
+  }
+
+  setEnableHilog(enabled: boolean, context?: common.UIAbilityContext): void {
+    this.config.enableHilog = enabled;
+    if (context) {
+      this.saveConfig(context);
+    }
+  }
+
+  isHilogEnabled(): boolean {
+    return this.config.enableHilog;
   }
 
   setEnablePersistence(enabled: boolean, context?: common.UIAbilityContext): void {
@@ -509,12 +529,17 @@ export class Logger {
   }
 
   private sanitizeEntry(entry: LogEntry): LogEntry {
-    return {
-      ...entry,
+    const sanitized: LogEntry = {
+      timestamp: entry.timestamp,
+      level: entry.level,
+      tag: entry.tag,
       message: this.sanitizeText(entry.message),
       data: entry.data ? this.sanitizeText(entry.data) : undefined,
-      stack: entry.stack ? this.sanitizeText(entry.stack) : undefined
+      stack: entry.stack ? this.sanitizeText(entry.stack) : undefined,
+      repeatCount: entry.repeatCount,
+      firstTimestamp: entry.firstTimestamp
     };
+    return sanitized;
   }
 
   private persistIfNeeded(entry: LogEntry): void {
@@ -652,19 +677,42 @@ export class Logger {
     const levelStr = LogLevel[entry.level];
     const repeatSuffix = entry.repeatCount > 1 ? ` (x${entry.repeatCount})` : '';
     const logMessage = `[${timeStr}][${levelStr}][${entry.tag}] ${entry.message}${repeatSuffix}`;
-    switch (entry.level) {
-      case LogLevel.DEBUG:
-        console.debug(logMessage, entry.data || '');
-        break;
-      case LogLevel.INFO:
-        console.info(logMessage, entry.data || '');
-        break;
-      case LogLevel.WARN:
-        console.warn(logMessage, entry.data || '');
-        break;
-      case LogLevel.ERROR:
-        console.error(logMessage, entry.data || '');
-        break;
+
+    // Console 输出
+    if (this.config.enableConsole) {
+      switch (entry.level) {
+        case LogLevel.DEBUG:
+          console.debug(logMessage, entry.data || '');
+          break;
+        case LogLevel.INFO:
+          console.info(logMessage, entry.data || '');
+          break;
+        case LogLevel.WARN:
+          console.warn(logMessage, entry.data || '');
+          break;
+        case LogLevel.ERROR:
+          console.error(logMessage, entry.data || '');
+          break;
+      }
+    }
+
+    // HiLog 输出
+    if (this.config.enableHilog) {
+      const hilogMessage = `${entry.message}${repeatSuffix}${entry.data ? ' | ' + entry.data : ''}`;
+      switch (entry.level) {
+        case LogLevel.DEBUG:
+          hilog.debug(this.HILOG_DOMAIN, entry.tag, '%{public}s', hilogMessage);
+          break;
+        case LogLevel.INFO:
+          hilog.info(this.HILOG_DOMAIN, entry.tag, '%{public}s', hilogMessage);
+          break;
+        case LogLevel.WARN:
+          hilog.warn(this.HILOG_DOMAIN, entry.tag, '%{public}s', hilogMessage);
+          break;
+        case LogLevel.ERROR:
+          hilog.error(this.HILOG_DOMAIN, entry.tag, '%{public}s', hilogMessage);
+          break;
+      }
     }
   }
   
@@ -894,6 +942,7 @@ export class Logger {
     try {
       const pref = preferences.getPreferencesSync(context, { name: this.PERSISTENCE_PREF_KEY });
       pref.put('minLevel', this.config.minLevel);
+      pref.put('enableHilog', this.config.enableHilog);
       pref.put('enablePersistence', this.config.enablePersistence);
       pref.put('persistenceIncludeInfo', this.config.persistenceIncludeInfo);
       pref.put('persistenceMaxBytes', this.config.persistenceMaxBytes);

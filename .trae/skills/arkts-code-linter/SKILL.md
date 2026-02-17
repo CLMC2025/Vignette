@@ -1,113 +1,65 @@
 ---
-name: "arkts-code-linter"
-description: "基于华为 HarmonyOS NEXT 官方文档和 ArkTS 规范的代码检查工具。自动检测代码中的规范违规、性能问题和潜在错误，确保代码符合 HarmonyOS 应用开发最佳实践。"
+name: arkts-code-linter
+description: Detect and fix ArkTS code specification issues. Run in real-time while writing ArkTS code, or execute before code review to ensure code complies with HarmonyOS NEXT official specifications.
+author: clmc2025
+version: "1.0.0"
+license: MIT
+tags:
+  - arkts
+  - harmonyos
+  - openharmony
+  - linter
+  - code-quality
+  - static-analysis
 ---
 
-# ArkTS Code Linter - HarmonyOS NEXT 规范检查工具
+# ArkTS Code Linter
 
-## 功能概述
+A comprehensive code linting tool for ArkTS based on Huawei HarmonyOS NEXT official documentation.
 
-本工具基于 [华为 HarmonyOS NEXT 官方开发文档](https://developer.huawei.com/consumer/cn/doc/) 和项目规范，提供全面的 ArkTS 代码检查功能。
+## Overview
 
-## 核心检查规则
+This tool provides comprehensive ArkTS code specification detection and repair functions to help developers write high-quality code that complies with official specifications.
 
-### 1. 语言规范检查 (强制)
+## Core Features
 
-#### 1.1 严格类型安全
-- **禁止 `any` 类型**：所有变量和函数返回值必须显式声明类型
-- **禁止 `unknown` 类型**：特殊情况需添加注释说明
-- **空安全检查**：必须处理 `null` 和 `undefined`
-- **ESObject 使用规范**：仅在与 JS 库交互时使用，使用后立即转换
+### 1. Comprehensive Specification Scanning
+- **Type Safety**: Detect `any`/`unknown` usage, enforce explicit type declarations
+- **ArkUI Standards**: Check decorators, state management, layout specifications
+- **Naming Conventions**: Validate PascalCase, camelCase, UPPER_SNAKE_CASE
+- **Performance Optimization**: Identify LazyForEach usage, rendering optimization suggestions
 
-#### 1.2 语法限制
-- **类字段初始化**：必须在声明时或构造函数中初始化
-- **模块化规范**：使用 ES6 `import`/`export`，禁止 CommonJS `require`
-- **类型声明**：禁止内联对象字面量作为类型，必须使用具名 `interface`/`type`
-- **JSON 解析**：`JSON.parse()` 后必须转为显式结构类型
+### 2. Smart Auto-Fix
+- Auto-fix indentation and whitespace issues
+- Auto-replace px units with vp
+- Auto-convert CommonJS require to ES6 import
 
-### 2. ArkUI 开发规范
+### 3. Flexible Configuration
+- Support `.arktslintrc.json` configuration file
+- Support line-level and file-level ignore comments
+- Customizable rule severity levels
 
-#### 2.1 组件化设计
-- **装饰器检查**：`@Component`、`@Entry` 使用规范
-- **Builder 语法**：`@Builder` 内禁止 `return` 早退和普通语句块
-- **组件拆分**：单个文件不超过 500 行
+## Usage
 
-#### 2.2 状态管理
-- **装饰器选择**：`@State`、`@Prop`、`@Link`、`@Provide`/`@Consume` 正确使用
-- **状态更新**：必须通过赋值更新，禁止直接修改对象属性
+This skill is automatically invoked by the AI assistant when:
+- Writing or reviewing ArkTS code
+- Detecting potential specification violations
+- Suggesting code improvements
 
-#### 2.3 布局与样式
-- **单位规范**：使用 `vp`/`fp`，禁止硬编码 `px`
-- **布局性能**：减少 `Stack`/`Flex` 嵌套，优先使用 `RelativeContainer`
-- **列表渲染**：必须使用 `LazyForEach` 并提供唯一 `keyGenerator`
+### Configuration
 
-### 3. 性能优化检查
-
-#### 3.1 渲染性能
-- **LazyForEach**：长列表必须使用懒加载
-- **条件渲染**：频繁切换使用 `visibility` 而非 `if/else`
-- **图片优化**：大图使用 `sourceSize` 属性
-
-#### 3.2 并发与异步
-- **主线程减负**：耗时操作移至 `TaskPool` 或 `Worker`
-- **异步规范**：使用 Promise 或 async/await
-
-#### 3.3 内存管理
-- **资源释放**：`aboutToDisappear` 中注销监听和定时器
-- **上下文泄漏**：禁止持有 `AbilityContext` 或 UI 组件引用
-
-### 4. 项目架构规范
-
-#### 4.1 目录结构
-```
-entry/src/main/ets/
-├── pages/          # 页面入口 (@Entry)
-├── components/     # 公共 UI 组件
-├── model/          # 数据模型
-├── utils/          # 工具类
-├── service/        # 业务逻辑服务
-└── resources/      # 静态资源
-```
-
-#### 4.2 命名规范
-- **类/接口/组件**：PascalCase
-- **变量/函数**：camelCase
-- **常量/枚举**：UPPER_SNAKE_CASE
-
-## 使用方法
-
-### 命令行检查
-
-```bash
-# 检查单个文件
-arkts-linter check src/main/ets/pages/Index.ets
-
-# 检查整个目录
-arkts-linter check src/main/ets/
-
-# 自动修复可修复的问题
-arkts-linter fix src/main/ets/pages/Index.ets
-```
-
-### 配置规则
-
-在项目根目录创建 `.arktslintrc.json`：
+Create `.arktslintrc.json` in project root:
 
 ```json
 {
   "rules": {
     "no-any": "error",
     "no-unknown": "error",
-    "static-method-this": "error",
-    "component-syntax": "error",
-    "indent": ["error", 2],
-    "naming-convention": "error",
-    "proper-decorator-use": "error",
-    "component-root-node": "error",
-    "state-management": "warning",
-    "lazy-for-each": "error",
     "no-px-unit": "error",
-    "use-vp-fp": "error"
+    "use-vp-fp": "warning",
+    "lazy-for-each": "error",
+    "indent": ["error", 2],
+    "naming-convention": "error"
   },
   "ignore": [
     "node_modules/**",
@@ -118,47 +70,93 @@ arkts-linter fix src/main/ets/pages/Index.ets
 }
 ```
 
-## 规则说明
+## Rules
 
-| 规则名称 | 描述 | 严重程度 | 可修复 |
-|---------|------|---------|--------|
-| no-any | 禁止使用 any 类型 | error | false |
-| no-unknown | 禁止使用 unknown 类型 | error | false |
-| static-method-this | 静态方法中禁止使用 this | error | true |
-| no-untyped-objects | 禁止无类型对象字面量 | error | false |
-| component-syntax | 组件语法规范检查 | error | false |
-| proper-decorator-use | 装饰器正确使用 | error | false |
-| component-root-node | 组件根节点规则 | error | false |
-| state-management | 状态管理最佳实践 | warning | false |
-| lazy-for-each | 列表必须使用 LazyForEach | error | false |
-| no-px-unit | 禁止硬编码 px 单位 | error | true |
-| use-vp-fp | 必须使用 vp/fp 单位 | error | true |
-| indent | 缩进规范 | error | true |
-| naming-convention | 命名规范检查 | error | false |
+| Rule | Description | Severity | Fixable |
+|------|-------------|----------|---------|
+| no-any | Disallow any type | error | ❌ |
+| no-unknown | Disallow unknown type | error | ❌ |
+| no-px-unit | Disallow px units | error | ✅ |
+| use-vp-fp | Suggest vp/fp units | warning | ✅ |
+| lazy-for-each | Suggest LazyForEach for lists | warning | ❌ |
+| no-require | Disallow CommonJS require | error | ✅ |
+| indent | Indentation (2 spaces) | error | ✅ |
+| naming-class | Class names use PascalCase | error | ❌ |
+| naming-interface | Interface names use PascalCase | error | ❌ |
+| trailing-whitespace | No trailing whitespace | warning | ✅ |
 
-## 忽略特定代码
+## Rule Details
 
-```typescript
-// 忽略单行
-// @arktslint-ignore no-any
-const data: any = getData();
+### Language Specification (Mandatory)
 
-// 忽略多行
-// @arktslint-ignore no-any, no-unknown
-const data: any = getData();
-const info: unknown = getInfo();
+#### Strict Type Safety
+- **No `any` type**: All variables and function return values must have explicit types
+- **No `unknown` type**: Special cases require comments
+- **Null safety**: Must handle `null` and `undefined`
+- **ESObject usage**: Only use when interacting with JS libraries
 
-// 忽略整个文件
-// @arktslint-ignore-file
+#### Syntax Restrictions
+- **Class field initialization**: Must initialize in declaration or constructor
+- **Module standards**: Use ES6 `import`/`export`, no CommonJS `require`
+- **Type declarations**: No inline object literals, use named `interface`/`type`
+- **JSON parsing**: Must convert to explicit struct types after `JSON.parse()`
+
+### ArkUI Development Standards
+
+#### Component Design
+- **Decorator checks**: `@Component`, `@Entry` usage standards
+- **Builder syntax**: No early return or plain statements in `@Builder`
+- **Component splitting**: Single file should not exceed 500 lines
+
+#### State Management
+- **Decorator selection**: Correct use of `@State`, `@Prop`, `@Link`, `@Provide`/`@Consume`
+- **State updates**: Must update via assignment, no direct object property modification
+
+#### Layout & Styling
+- **Unit standards**: Use `vp`/`fp`, no hardcoded `px`
+- **Layout performance**: Reduce `Stack`/`Flex` nesting, prefer `RelativeContainer`
+- **List rendering**: Must use `LazyForEach` with unique `keyGenerator`
+
+### Performance Optimization
+
+#### Rendering Performance
+- **LazyForEach**: Long lists must use lazy loading
+- **Conditional rendering**: Use `visibility` instead of `if/else` for frequent toggles
+- **Image optimization**: Use `sourceSize` for large images
+
+#### Concurrency & Async
+- **Main thread relief**: Move time-consuming operations to `TaskPool` or `Worker`
+- **Async standards**: Use Promise or async/await
+
+#### Memory Management
+- **Resource release**: Unregister listeners and timers in `aboutToDisappear`
+- **Context leaks**: Don't hold `AbilityContext` or UI component references
+
+### Project Architecture
+
+#### Directory Structure
+```
+entry/src/main/ets/
+├── pages/          # Page entries (@Entry)
+├── components/     # Shared UI components
+├── model/          # Data models
+├── utils/          # Utilities
+├── service/        # Business logic services
+└── resources/      # Static resources
 ```
 
-## 参考文档
+#### Naming Conventions
+- **Classes/Interfaces/Components**: PascalCase
+- **Variables/Functions**: camelCase
+- **Constants/Enums**: UPPER_SNAKE_CASE
 
-- [HarmonyOS NEXT 开发文档](https://developer.huawei.com/consumer/cn/doc/)
-- [ArkTS 语言规范](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides-V5/arkts-basics-V5)
-- [ArkUI 开发指南](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides-V5/arkui-overview-V5)
-- [性能优化最佳实践](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides-V5/performance-overview-V5)
+## References
 
-## 许可证
+- [HarmonyOS NEXT Docs](https://developer.huawei.com/consumer/cn/doc/)
+- [ArkTS Language Guide](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides-V5/arkts-basics-V5)
+- [ArkUI Development Guide](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides-V5/arkui-overview-V5)
+- [Performance Best Practices](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides-V5/performance-overview-V5)
+
+## License
 
 MIT License

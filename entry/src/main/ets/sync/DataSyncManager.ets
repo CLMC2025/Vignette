@@ -138,14 +138,23 @@ export class DataSyncManager {
    * 导出数据
    */
   async exportData(): Promise<ExportResult> {
-    if (this.syncStatus !== SyncStatus.IDLE) {
-      return { success: false, data: '', error: '同步操作正在进行中' };
-    }
-
-    this.syncStatus = SyncStatus.EXPORTING;
-
     try {
-      const words = await this.dbManager.getAllWords();
+      const totalWords = await this.dbManager.getWordCount();
+      console.info(`[DataSyncManager] Exporting ${totalWords} words in batches`);
+
+      const batchSize = 500;
+      const words: WordItem[] = [];
+
+      for (let offset = 0; offset < totalWords; offset += batchSize) {
+        const batch = await this.dbManager.getWordsPaged(batchSize, offset);
+        words.push(...batch);
+
+        if (offset % 1000 === 0) {
+          console.info(`[DataSyncManager] Exported ${words.length}/${totalWords} words`);
+        }
+
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      }
 
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -184,11 +193,8 @@ export class DataSyncManager {
         `${words.length} 个单词, ${exportedBooks.length} 本词书`
       );
 
-      this.syncStatus = SyncStatus.IDLE;
-
       return { success: true, data: jsonData, error: '' };
     } catch (e) {
-      this.syncStatus = SyncStatus.ERROR;
       const errMsg = e instanceof Error ? e.message : String(e);
       console.error('[DataSyncManager] Export failed:', errMsg);
       return { success: false, data: '', error: errMsg };
@@ -426,19 +432,18 @@ export class DataSyncManager {
    * 增量导出数据（仅导出指定时间后变更的数据）
    */
   async exportIncremental(sinceMs: number, includeDefinitions: boolean = false): Promise<ExportResult> {
-    if (this.syncStatus !== SyncStatus.IDLE) {
-      return { success: false, data: '', error: '同步操作正在进行中' };
-    }
-
-    this.syncStatus = SyncStatus.EXPORTING;
-
     try {
       const words = await this.dbManager.getLearnedWordsUpdatedAfter(sinceMs);
+      console.info(`[DataSyncManager] Incremental export: ${words.length} words updated after ${sinceMs}`);
+
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
       let definitions: ExportedDefinition[] = [];
       if (includeDefinitions) {
         definitions = await this.getAllCachedDefinitions();
       }
+
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
       const userBooks = await this.dbManager.getUserWordBooks();
       const exportedBooks: ExportedUserBook[] = [];
@@ -464,11 +469,8 @@ export class DataSyncManager {
       const fsrsParamsJson = fsrsParams !== null ? fsrsParams.toJSON() : '';
       const jsonData = await this.exportImport.exportToJSONAsync(words, definitions, this.versionControl, fsrsParamsJson, exportedBooks);
 
-      this.syncStatus = SyncStatus.IDLE;
-
       return { success: true, data: jsonData, error: '' };
     } catch (e) {
-      this.syncStatus = SyncStatus.ERROR;
       const errMsg = e instanceof Error ? e.message : String(e);
       console.error('[DataSyncManager] Incremental export failed:', errMsg);
       return { success: false, data: '', error: errMsg };
@@ -479,14 +481,6 @@ export class DataSyncManager {
    * 增量导入数据（合并策略：updatedAt 更新的覆盖）
    */
   async importIncremental(jsonData: string): Promise<SyncResult> {
-    if (this.syncStatus !== SyncStatus.IDLE) {
-      const result = new SyncResult();
-      result.addError('同步操作正在进行中');
-      return result;
-    }
-
-    this.syncStatus = SyncStatus.IMPORTING;
-
     try {
       const importResult = this.exportImport.importFromJSON(jsonData, this.versionControl);
       const data: ExportData = importResult.data;
@@ -589,10 +583,8 @@ export class DataSyncManager {
         }
       }
 
-      this.syncStatus = SyncStatus.IDLE;
       return result;
     } catch (e) {
-      this.syncStatus = SyncStatus.ERROR;
       const errMsg = e instanceof Error ? e.message : String(e);
       console.error('[DataSyncManager] Incremental import failed:', errMsg);
       const result = new SyncResult();

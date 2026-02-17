@@ -1,54 +1,37 @@
 # ArkTS Code Linter
 
-基于华为 HarmonyOS NEXT 官方文档的 ArkTS 代码规范检查工具。
+A code linting skill for ArkTS based on Huawei HarmonyOS NEXT official documentation.
 
-## 功能特性
+## Features
 
-- ✅ **严格类型检查**：禁止 `any`/`unknown`，强制显式类型声明
-- ✅ **ArkUI 规范检查**：装饰器、状态管理、布局规范
-- ✅ **性能优化建议**：LazyForEach、渲染优化、内存管理
-- ✅ **命名规范检查**：PascalCase、camelCase、UPPER_SNAKE_CASE
-- ✅ **自动修复支持**：可自动修复缩进、单位等问题
+- ✅ **Strict Type Checking**: Disallow `any`/`unknown`, enforce explicit type declarations
+- ✅ **ArkUI Standards**: Check decorators, state management, layout specifications
+- ✅ **Performance Suggestions**: LazyForEach, rendering optimization, memory management
+- ✅ **Naming Conventions**: PascalCase, camelCase, UPPER_SNAKE_CASE
 
-## 快速开始
+## Usage
 
-### 安装
+This skill is automatically invoked by the AI assistant when:
+- Writing or reviewing ArkTS code
+- Detecting potential specification violations
+- Suggesting code improvements
 
-将本目录复制到项目的 `.trae/skills/` 目录下：
+## Rules
 
-```bash
-cp -r arkts-code-linter .trae/skills/
-```
+| Rule | Description | Severity |
+|------|-------------|----------|
+| no-any | Disallow any type | error |
+| no-unknown | Disallow unknown type | error |
+| no-px-unit | Disallow px units | error |
+| lazy-for-each | Suggest LazyForEach for lists | warning |
+| naming-class | Class names use PascalCase | error |
+| naming-interface | Interface names use PascalCase | error |
 
-### 使用
+## References
 
-```bash
-# 检查文件
-arkts-linter check src/main/ets/pages/Index.ets
+- [Huawei Developer Docs](https://developer.huawei.com/consumer/cn/doc/)
+- [ArkTS Language Guide](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides-V5/arkts-basics-V5)
 
-# 检查目录
-arkts-linter check src/main/ets/
+## License
 
-# 自动修复
-arkts-linter fix src/main/ets/pages/Index.ets
-```
-
-## 配置
-
-创建 `.arktslintrc.json`：
-
-```json
-{
-  "rules": {
-    "no-any": "error",
-    "no-unknown": "error",
-    "lazy-for-each": "error",
-    "no-px-unit": "error"
-  }
-}
-```
-
-## 参考
-
-- [华为开发者文档](https://developer.huawei.com/consumer/cn/doc/)
-- [ArkTS 语言指南](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides-V5/arkts-basics-V5)
+MIT License

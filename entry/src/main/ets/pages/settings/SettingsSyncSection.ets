@@ -110,11 +110,22 @@ export struct SettingsSyncSection {
     return saved;
   }
 
+  private readonly OPERATION_TIMEOUT = 120000; // 120秒超时
+
+  private async runWithTimeout<T>(operation: () => Promise<T>, timeoutMs: number): Promise<T> {
+    return Promise.race([
+      operation(),
+      new Promise<T>((_, reject) => {
+        setTimeout(() => reject(new Error('操作超时，请检查网络连接')), timeoutMs);
+      })
+    ]);
+  }
+
   private async runWebDavAction(fn: () => Promise<WebDavSyncResult>): Promise<void> {
     if (this.webdavBusy) return;
     this.webdavBusy = true;
     try {
-      const res = await fn();
+      const res = await this.runWithTimeout(fn, this.OPERATION_TIMEOUT);
       this.webdavResult = res.success ? `✅ ${res.message}` : `⚠️ ${res.message}：${res.detail}`;
       promptAction.showToast({ message: res.message, duration: 1200 });
     } catch (e) {
@@ -130,11 +141,11 @@ export struct SettingsSyncSection {
     if (this.webdavBusy) return;
     this.webdavBusy = true;
     this.webdavBackupResult = '正在处理...';
-    
+
     await new Promise<void>((resolve) => setTimeout(resolve, 50));
-    
+
     try {
-      const res = await fn();
+      const res = await this.runWithTimeout(fn, this.OPERATION_TIMEOUT);
       this.webdavBackupResult = res.success ? `✅ ${res.message}` : `⚠️ ${res.message}：${res.detail}`;
       promptAction.showToast({ message: res.message, duration: 1200 });
     } catch (e) {
@@ -147,7 +158,7 @@ export struct SettingsSyncSection {
   }
 
   private async webdavBackup(): Promise<void> {
-    await this.runWebDavBackupAction(async () => this.webdavManager.backupToCloud());
+    await this.runWebDavBackupAction(async () => this.webdavManager.backupToCloudInBackground());
   }
 
   private async webdavRestore(): Promise<void> {
@@ -158,9 +169,10 @@ export struct SettingsSyncSection {
     if (this.webdavBusy) return;
     this.webdavBusy = true;
     this.webdavResult = '正在同步...';
-    
-    await new Promise<void>((resolve) => setTimeout(resolve, 50));
-    
+
+    // 使用更长的延迟确保 UI 更新
+    await new Promise<void>((resolve) => setTimeout(resolve, 100));
+
     try {
       const saved = await this.saveWebDavSettings();
       if (!saved) {
@@ -168,10 +180,11 @@ export struct SettingsSyncSection {
         promptAction.showToast({ message: '保存设置失败', duration: 1200 });
         return;
       }
-      
+
+      // 给 UI 线程时间响应
       await new Promise<void>((resolve) => setTimeout(resolve, 50));
-      
-      const res = await this.webdavManager.syncIncremental();
+
+      const res = await this.runWithTimeout(() => this.webdavManager.syncIncremental(), this.OPERATION_TIMEOUT);
       this.webdavResult = res.success ? `✅ ${res.message}` : `⚠️ ${res.message}：${res.detail}`;
       promptAction.showToast({ message: res.message, duration: 1200 });
     } catch (e) {
