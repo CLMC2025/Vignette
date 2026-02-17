@@ -150,8 +150,13 @@ export class SecureStorage {
       return false;
     }
 
+    if (!this.abilityContext) {
+      console.error('[SecureStorage] clearAll: abilityContext is not available');
+      return false;
+    }
+
     try {
-      await preferences.deletePreferences(globalThis.abilityContext, SecureStorage.PREFERENCES_NAME);
+      await preferences.deletePreferences(this.abilityContext, SecureStorage.PREFERENCES_NAME);
       this.isInitialized = false;
       this.preferences = null;
       return true;

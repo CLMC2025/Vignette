@@ -23,6 +23,16 @@ export class CryptoError extends Error {
   }
 }
 
+/**
+ * Error thrown when secure random number generation fails
+ */
+export class SecureRandomError extends CryptoError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SecureRandomError';
+  }
+}
+
 export interface EncryptedPayload {
   v: number;            // version
   alg: string;          // algorithm
@@ -69,6 +79,12 @@ function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
   return diff === 0;
 }
 
+/**
+ * Generate cryptographically secure random bytes
+ * @param len Number of random bytes to generate
+ * @returns Uint8Array of random bytes
+ * @throws SecureRandomError if secure random generation fails
+ */
 async function randomBytes(len: number): Promise<Uint8Array> {
   try {
     // Use cryptoFramework for secure random number generation
@@ -76,13 +92,11 @@ async function randomBytes(len: number): Promise<Uint8Array> {
     const randomBlob = await rand.generateRandom(len);
     return new Uint8Array(randomBlob.data);
   } catch (e) {
-    // Fallback: use Math.random() only if cryptoFramework fails
-    console.warn('[WebDavCrypto] cryptoFramework failed, using fallback:', e);
-    const out = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-      out[i] = Math.floor(Math.random() * 256) & 0xff;
-    }
-    return out;
+    // SECURITY: Do NOT fallback to Math.random() as it is not cryptographically secure
+    // Math.random() would severely compromise encryption security
+    const errMsg = e instanceof Error ? e.message : String(e);
+    console.error('[WebDavCrypto] CRITICAL: Failed to generate secure random bytes:', errMsg);
+    throw new SecureRandomError('无法生成安全随机数：系统加密服务不可用。请确保应用运行在支持的 HarmonyOS 环境中。');
   }
 }
 

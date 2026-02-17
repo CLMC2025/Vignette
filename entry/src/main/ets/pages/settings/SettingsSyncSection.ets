@@ -2,7 +2,7 @@ import promptAction from '@ohos.promptAction';
 import { DesignTokens } from '../../model/DesignTokens';
 import { ColorsInterface } from '../../model/TokenInterfaces';
 import { ThemeManager } from '../../manager/ThemeManager';
-import { WebDavSyncManager, WebDavSettings, WebDavSyncResult } from '../../sync/WebDavSyncManager';
+import { WebDavSyncManager, WebDavSettings, WebDavSyncResult, WebDavBackupPlainResult } from '../../sync/WebDavSyncManager';
 import { DataSyncManager } from '../../sync/DataSyncManager';
 import { WebDavStateStore } from '../../utils/WebDavStateStore';
 import { SelectOption } from './SettingsCommon';
@@ -138,10 +138,10 @@ export struct SettingsSyncSection {
     }
   }
 
-  private async runWebDavBackupAction(fn: () => Promise<WebDavSyncResult>): Promise<void> {
+  private async runWebDavBackupAction(fn: () => Promise<WebDavSyncResult>, loadingMessage: string = '正在处理...'): Promise<void> {
     if (this.webdavBusy) return;
     this.webdavBusy = true;
-    this.webdavBackupResult = '正在处理...';
+    this.webdavBackupResult = loadingMessage;
 
     await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
@@ -159,12 +159,18 @@ export struct SettingsSyncSection {
   }
 
   private async webdavBackup(): Promise<void> {
-    await this.runWebDavBackupAction(async () => this.webdavManager.backupToCloudInBackground());
+    await this.runWebDavBackupAction(async () => this.webdavManager.backupToCloudInBackground(), '正在备份到云端...');
   }
 
   private async webdavRestore(): Promise<void> {
     // Bug fix: 检查是否已经在处理中，防止重复触发
     if (this.webdavBusy) {
+      return;
+    }
+
+    // Bug fix: 防止重复弹出恢复确认对话框
+    if (this.restoreDialogShowing) {
+      console.warn('[SettingsSyncSection] Restore dialog already showing, skipping duplicate call');
       return;
     }
 
@@ -186,15 +192,104 @@ export struct SettingsSyncSection {
       return; // 对话框被关闭，视为取消
     }
 
-    // 执行下载和预览（内部还有第二层确认）
-    // runWebDavBackupAction 会管理 webdavBusy 状态和 UI 更新
-    await this.runWebDavBackupAction(async () => this.webdavRestoreWithPreview());
+    // 开始下载和解析流程，手动管理状态
+    this.webdavBusy = true;
+    this.restoreDialogShowing = true;
+    this.webdavBackupResult = '正在下载云端备份...';
+    
+    // Yield to UI thread to show download message
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+    let download: WebDavBackupPlainResult | null = null;
+    
+    try {
+      // Step 1: Download backup from cloud
+      download = await this.runWithTimeout(() => this.webdavManager.downloadBackupPlain(false), this.OPERATION_TIMEOUT);
+      
+      if (!download.result.success) {
+        this.webdavBackupResult = `⚠️ ${download.result.message}：${download.result.detail}`;
+        promptAction.showToast({ message: download.result.message, duration: 1200 });
+        this.webdavBusy = false;
+        this.restoreDialogShowing = false;
+        return;
+      }
+      
+      if (download.plain.length === 0) {
+        this.webdavBackupResult = '⚠️ 云端无备份：未找到可用的备份文件';
+        promptAction.showToast({ message: '云端无备份', duration: 1200 });
+        this.webdavBusy = false;
+        this.restoreDialogShowing = false;
+        return;
+      }
+
+      // Step 2: Parse and preview backup data
+      this.webdavBackupResult = '正在解析备份数据...';
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      
+      const preview = await this.syncManager.previewImport(download.plain);
+      if (preview.errors.length > 0) {
+        this.webdavBackupResult = `⚠️ 预览失败：${preview.errors.join('; ')}`;
+        promptAction.showToast({ message: '预览失败', duration: 1200 });
+        this.webdavBusy = false;
+        this.restoreDialogShowing = false;
+        return;
+      }
+
+      // Release busy state while waiting for user confirmation
+      this.webdavBusy = false;
+      this.webdavBackupResult = ''; // Clear loading message before showing dialog
+
+      // Step 3: Show second confirmation dialog with preview data
+      const sample = preview.sampleUpdatedWords.length > 0 ? `\n示例：${preview.sampleUpdatedWords.join('、')}` : '';
+      const msg = `⚠️ 警告：此操作将覆盖本地数据！\n\n将覆盖更新 ${preview.updated} 词，新增 ${preview.imported} 词，共 ${preview.total} 词。${sample}\n\n本地未同步的学习记录将丢失，请确认是否继续？`;
+
+      let userConfirmed = false;
+      try {
+        const dialogResult = await promptAction.showDialog({
+          title: '⚠️ 恢复确认',
+          message: msg,
+          buttons: [
+            { text: '取消', color: String(this.colors.TEXT_SECONDARY) },
+            { text: '确认恢复', color: String(this.colors.ERROR) }
+          ]
+        });
+
+        const clickedSecond = dialogResult as DialogIndexResult;
+        userConfirmed = clickedSecond.index === 1;
+      } catch (e) {
+        userConfirmed = false;
+      }
+
+      if (!userConfirmed) {
+        this.webdavBackupResult = '✅ 已取消恢复';
+        promptAction.showToast({ message: '已取消恢复', duration: 1200 });
+        this.restoreDialogShowing = false;
+        return;
+      }
+
+      // Step 4: User confirmed, proceed with restore
+      this.webdavBusy = true;
+      this.webdavBackupResult = '正在恢复数据...';
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+      const importResult = await this.runWithTimeout(() => this.webdavManager.importPlainBackup(download.plain), this.OPERATION_TIMEOUT);
+      this.webdavBackupResult = importResult.success ? `✅ ${importResult.message}` : `⚠️ ${importResult.message}：${importResult.detail}`;
+      promptAction.showToast({ message: importResult.message, duration: 1200 });
+
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.webdavBackupResult = `⚠️ WebDAV 操作异常：${msg}`;
+      promptAction.showToast({ message: 'WebDAV 操作异常', duration: 1200 });
+    } finally {
+      this.webdavBusy = false;
+      this.restoreDialogShowing = false;
+    }
   }
 
   private async webdavSyncNow(): Promise<void> {
     if (this.webdavBusy) return;
     this.webdavBusy = true;
-    this.webdavResult = '正在同步...';
+    this.webdavResult = '正在同步数据...';
 
     // 使用更长的延迟确保 UI 更新
     await new Promise<void>((resolve) => setTimeout(resolve, 100));
@@ -219,53 +314,6 @@ export struct SettingsSyncSection {
       promptAction.showToast({ message: 'WebDAV 操作异常', duration: 1200 });
     } finally {
       this.webdavBusy = false;
-    }
-  }
-
-  private async webdavRestoreWithPreview(): Promise<WebDavSyncResult> {
-    // Bug fix: 防止重复弹出恢复确认对话框
-    if (this.restoreDialogShowing) {
-      console.warn('[SettingsSyncSection] Restore dialog already showing, skipping duplicate call');
-      return WebDavSyncResult.ok('已取消恢复');
-    }
-
-    try {
-      this.restoreDialogShowing = true;
-
-      const download = await this.webdavManager.downloadBackupPlain(false);
-      if (!download.result.success) return download.result;
-      if (download.plain.length === 0) {
-        return WebDavSyncResult.fail('云端无备份', download.result.message || '未找到可用的备份文件');
-      }
-
-      const preview = await this.syncManager.previewImport(download.plain);
-      if (preview.errors.length > 0) {
-        return WebDavSyncResult.fail('预览失败', preview.errors.join('; '));
-      }
-
-      const sample = preview.sampleUpdatedWords.length > 0 ? `\n示例：${preview.sampleUpdatedWords.join('、')}` : '';
-      const msg = `⚠️ 警告：此操作将覆盖本地数据！\n\n将覆盖更新 ${preview.updated} 词，新增 ${preview.imported} 词，共 ${preview.total} 词。${sample}\n\n本地未同步的学习记录将丢失，请确认是否继续？`;
-
-      try {
-        const dialogResult = await promptAction.showDialog({
-          title: '⚠️ 恢复确认',
-          message: msg,
-          buttons: [
-            { text: '取消', color: String(this.colors.TEXT_SECONDARY) },
-            { text: '确认恢复', color: String(this.colors.ERROR) }
-          ]
-        });
-
-        const clicked = dialogResult as DialogIndexResult;
-        if (clicked.index === 0) {
-          return WebDavSyncResult.ok('已取消恢复');
-        }
-        return await this.webdavManager.importPlainBackup(download.plain);
-      } catch (e) {
-        return WebDavSyncResult.ok('已取消恢复');
-      }
-    } finally {
-      this.restoreDialogShowing = false;
     }
   }
 
