@@ -456,11 +456,22 @@ export struct SettingsSyncSection {
           this.saveWebDavAutoSyncSettings();
         })
 
-        Text(`上次自动同步：${this.formatWebDavAutoSyncLastSuccess()}${this.webdavAutoSyncLastError.length > 0 ? `\n最近错误：${this.webdavAutoSyncLastError}` : ''}`)
-          .fontSize(DesignTokens.Typography.FONT_SIZE_SM)
-          .fontColor(this.webdavAutoSyncLastError.length > 0 ? this.colors.WARNING : this.colors.GRAY_500)
-          .width('100%')
-          .padding({ left: DesignTokens.Spacing.LG, right: DesignTokens.Spacing.LG, top: DesignTokens.Spacing.SM })
+        Column() {
+          Text(`上次自动同步：${this.formatWebDavAutoSyncLastSuccess()}`)
+            .fontSize(DesignTokens.Typography.FONT_SIZE_SM)
+            .fontColor(this.colors.GRAY_500)
+            .width('100%')
+
+          if (this.webdavAutoSyncLastError.length > 0) {
+            Text(`最近错误：${this.webdavAutoSyncLastError}`)
+              .fontSize(DesignTokens.Typography.FONT_SIZE_SM)
+              .fontColor(this.colors.ERROR)
+              .width('100%')
+              .margin({ top: DesignTokens.Spacing.XS })
+          }
+        }
+        .width('100%')
+        .padding({ left: DesignTokens.Spacing.LG, right: DesignTokens.Spacing.LG, top: DesignTokens.Spacing.SM })
       }
     }
     .width('100%')
@@ -547,7 +558,7 @@ export struct SettingsSyncSection {
           .height(44)
           .fontSize(DesignTokens.Typography.FONT_SIZE_BASE)
           .fontColor(this.colors.WHITE)
-          .backgroundColor(this.webdavBusy ? this.colors.GRAY_400 : this.colors.WARNING)
+          .backgroundColor(this.webdavBusy ? this.colors.GRAY_400 : this.colors.ERROR)
           .borderRadius(DesignTokens.BorderRadius.MD)
           .enabled(!this.webdavBusy)
           .margin({ left: DesignTokens.Spacing.SM })

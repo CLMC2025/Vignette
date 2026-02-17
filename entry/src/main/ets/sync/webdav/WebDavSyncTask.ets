@@ -459,15 +459,3 @@ export async function executeDecrypt(params: DecryptTaskParams): Promise<Decrypt
     return errorResult;
   }
 }
-      const result: UploadTaskResult = { success: false, detail: `PUT ${putRes.statusCode}: ${putRes.body}` };
-      return result;
-    }
-    const successResult: UploadTaskResult = { success: true, detail: '' };
-    return successResult;
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.error('[WebDavSyncTask] Upload failed:', msg);
-    const errorResult: UploadTaskResult = { success: false, detail: msg };
-    return errorResult;
-  }
-}
