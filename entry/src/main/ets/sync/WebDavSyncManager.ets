@@ -1092,9 +1092,13 @@ export class WebDavSyncManager {
       return await taskpool.execute(new taskpool.Task(taskFn, params)) as TResult;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      // 仅捕获 TaskPool 不支持的错误，其他错误继续抛出
-      if (msg.includes('Capability not support')) {
-        console.warn(`[WebDavSyncManager] TaskPool not supported on this device, falling back to main thread execution. UI may freeze temporarily during encryption/network operations: ${msg}`);
+      // 仅捕获 TaskPool 不支持的错误（匹配多种变体），其他错误继续抛出
+      const isCapabilityError = msg.includes('Capability not support') || 
+                                 msg.includes('Capability not supported') ||
+                                 msg.includes('TaskPool not support');
+      if (isCapabilityError) {
+        console.warn(`[WebDavSyncManager] TaskPool not supported on this device, falling back to main thread.`);
+        console.warn(`[WebDavSyncManager] UI may freeze temporarily during encryption/network operations. Error: ${msg}`);
         return await taskFn(params);
       }
       throw e;  // 其他错误继续向上抛出
