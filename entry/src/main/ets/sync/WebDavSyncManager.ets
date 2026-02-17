@@ -955,6 +955,15 @@ export class WebDavSyncManager {
       const uploadMs = Date.now() - uploadStartMs;
 
       if (result.success) {
+        // 备份成功后，更新本地 VersionControl 时间戳，确保本地版本号与导出数据同步
+        try {
+          syncManager.getVersionControl().updateTimestamp();
+          console.info('[WebDavSyncManager] Local VersionControl timestamp updated after backup');
+        } catch (e) {
+          const errMsg = e instanceof Error ? e.message : String(e);
+          console.warn(`[WebDavSyncManager] Failed to update local VersionControl: ${errMsg}`);
+        }
+        
         const totalBackupMs = Date.now() - backupStartMs;
         console.info(`[WebDavSyncManager] ==== Backup completed successfully total_ms=${totalBackupMs} export_ms=${exportMs} upload_ms=${uploadMs} ====`);
         return WebDavSyncResult.ok(result.message);
