@@ -39,6 +39,12 @@ export interface BackupTaskParams extends SyncTaskParams {
   backupData: string; // 已经加密的数据
 }
 
+// 备份任务参数（需要加密）
+export interface BackupTaskWithEncryptParams extends SyncTaskParams {
+  backupFilePath: string;
+  plainData: string; // 未加密的数据，将在 TaskPool 中加密
+}
+
 // 备份任务结果
 export interface BackupTaskResult {
   success: boolean;
@@ -62,6 +68,12 @@ export interface DownloadTaskResult {
 export interface UploadTaskParams extends SyncTaskParams {
   remoteFile: string;
   data: string; // 要上传的加密数据
+}
+
+// 上传任务参数（需要加密）
+export interface UploadTaskWithEncryptParams extends SyncTaskParams {
+  remoteFile: string;
+  plainData: string; // 未加密的数据，将在 TaskPool 中加密
 }
 
 // 上传任务结果
@@ -107,6 +119,55 @@ export async function executeBackupUpload(params: BackupTaskParams): Promise<Bac
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error('[WebDavSyncTask] Backup upload failed:', msg);
+    const errorResult: BackupTaskResult = {
+      success: false,
+      message: '备份失败',
+      detail: msg
+    };
+    return errorResult;
+  }
+}
+
+/**
+ * 执行备份加密+上传任务（在 TaskPool 中运行）
+ * 在后台线程中完成加密和上传，避免阻塞 UI 线程
+ */
+@Concurrent
+export async function executeBackupWithEncrypt(params: BackupTaskWithEncryptParams): Promise<BackupTaskResult> {
+  console.info('[WebDavSyncTask] Starting backup with encryption in taskpool');
+
+  try {
+    // 在 TaskPool 中加密数据
+    console.info('[WebDavSyncTask] Encrypting data in background');
+    const encrypted = await WebDavCrypto.encryptUtf8Async(params.plainData, params.syncPassword);
+
+    // 创建 WebDAV 客户端
+    const client = new WebDavClient(params.endpoint, params.username, params.password);
+
+    // 上传数据
+    console.info('[WebDavSyncTask] Uploading encrypted data');
+    const putRes = await client.put(params.backupFilePath, encrypted, 'application/json');
+    if (putRes.statusCode < 200 || putRes.statusCode >= 300) {
+      const result: BackupTaskResult = {
+        success: false,
+        message: '上传失败',
+        detail: `PUT ${putRes.statusCode}: ${putRes.body}`
+      };
+      return result;
+    }
+
+    console.info('[WebDavSyncTask] Backup completed successfully');
+
+    const successResult: BackupTaskResult = {
+      success: true,
+      message: '备份已上传',
+      detail: ''
+    };
+    return successResult;
+
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[WebDavSyncTask] Backup with encryption failed:', msg);
     const errorResult: BackupTaskResult = {
       success: false,
       message: '备份失败',
@@ -187,6 +248,42 @@ export async function executeUpload(params: UploadTaskParams): Promise<UploadTas
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error('[WebDavSyncTask] Upload failed:', msg);
+    const errorResult: UploadTaskResult = { success: false, detail: msg };
+    return errorResult;
+  }
+}
+
+/**
+ * 执行加密+上传任务（在 TaskPool 中运行）
+ * 在后台线程中完成加密和上传，避免阻塞 UI 线程
+ */
+@Concurrent
+export async function executeUploadWithEncrypt(params: UploadTaskWithEncryptParams): Promise<UploadTaskResult> {
+  console.info('[WebDavSyncTask] Starting upload with encryption in taskpool');
+
+  try {
+    // 在 TaskPool 中加密数据
+    console.info('[WebDavSyncTask] Encrypting data in background');
+    const encrypted = await WebDavCrypto.encryptUtf8Async(params.plainData, params.syncPassword);
+
+    // 创建 WebDAV 客户端
+    const client = new WebDavClient(params.endpoint, params.username, params.password);
+
+    // 上传数据
+    console.info('[WebDavSyncTask] Uploading encrypted data');
+    const putRes = await client.put(params.remoteFile, encrypted, 'application/json');
+    if (putRes.statusCode < 200 || putRes.statusCode >= 300) {
+      const result: UploadTaskResult = { success: false, detail: `PUT ${putRes.statusCode}: ${putRes.body}` };
+      return result;
+    }
+
+    console.info('[WebDavSyncTask] Upload completed successfully');
+    const successResult: UploadTaskResult = { success: true, detail: '' };
+    return successResult;
+
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[WebDavSyncTask] Upload with encryption failed:', msg);
     const errorResult: UploadTaskResult = { success: false, detail: msg };
     return errorResult;
   }

@@ -29,13 +29,17 @@ import { WebDavIncrementalSync } from './webdav/WebDavIncrementalSync';
 import taskpool from '@ohos.taskpool';
 import { 
   executeBackupUpload, 
+  executeBackupWithEncrypt,
   executeDownload, 
   executeUpload,
-  BackupTaskParams, 
+  executeUploadWithEncrypt,
+  BackupTaskParams,
+  BackupTaskWithEncryptParams,
   BackupTaskResult,
   DownloadTaskParams,
   DownloadTaskResult,
   UploadTaskParams,
+  UploadTaskWithEncryptParams,
   UploadTaskResult
 } from './webdav/WebDavSyncTask';
 import { WebDavCrypto } from './webdav/WebDavCrypto';
@@ -733,13 +737,8 @@ export class WebDavSyncManager {
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
       if (exportResult.data.length > 0) {
-        // 加密数据
-        const enc = await WebDavCrypto.encryptUtf8Async(exportResult.data, this.settings.syncPassword);
-
-        // yield 给 UI 线程
-        await new Promise<void>((resolve) => setTimeout(resolve, 0));
-
-        const uploadParams: UploadTaskParams = {
+        // 加密和上传数据（在 TaskPool 中执行，避免阻塞 UI）
+        const uploadParams: UploadTaskWithEncryptParams = {
           endpoint: this.settings.endpoint,
           username: this.settings.username,
           password: this.settings.password,
@@ -747,9 +746,9 @@ export class WebDavSyncManager {
           remoteRoot: this.settings.remoteRoot,
           manifestJson: this.manifest.toJSON(),
           remoteFile: this.wordsDeltaFilePath(),
-          data: enc
+          plainData: exportResult.data
         };
-        const uploadResult = await taskpool.execute(new taskpool.Task(executeUpload, uploadParams)) as UploadTaskResult;
+        const uploadResult = await taskpool.execute(new taskpool.Task(executeUploadWithEncrypt, uploadParams)) as UploadTaskResult;
 
         if (!uploadResult.success) {
           return WebDavSyncResult.fail('增量同步失败（单词上传）', uploadResult.detail);
@@ -801,12 +800,8 @@ export class WebDavSyncManager {
         // yield 给 UI 线程
         await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-        const enc = await WebDavCrypto.encryptUtf8Async(eventsJsonl, this.settings.syncPassword);
-
-        // yield 给 UI 线程
-        await new Promise<void>((resolve) => setTimeout(resolve, 0));
-
-        const eventsUploadParams: UploadTaskParams = {
+        // 加密和上传数据（在 TaskPool 中执行，避免阻塞 UI）
+        const eventsUploadParams: UploadTaskWithEncryptParams = {
           endpoint: this.settings.endpoint,
           username: this.settings.username,
           password: this.settings.password,
@@ -814,9 +809,9 @@ export class WebDavSyncManager {
           remoteRoot: this.settings.remoteRoot,
           manifestJson: this.manifest.toJSON(),
           remoteFile: this.eventsFilePath(),
-          data: enc
+          plainData: eventsJsonl
         };
-        const eventsUploadResult = await taskpool.execute(new taskpool.Task(executeUpload, eventsUploadParams)) as UploadTaskResult;
+        const eventsUploadResult = await taskpool.execute(new taskpool.Task(executeUploadWithEncrypt, eventsUploadParams)) as UploadTaskResult;
 
         if (!eventsUploadResult.success) {
           return WebDavSyncResult.fail('增量同步失败（事件上传）', eventsUploadResult.detail);
@@ -871,16 +866,9 @@ export class WebDavSyncManager {
       // yield 给 UI 线程
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-      // 加密数据（在主线程执行）
-      console.info('[WebDavSyncManager] Encrypting data');
-      const enc = await WebDavCrypto.encryptUtf8Async(exportResult.data, this.settings.syncPassword);
-
-      // yield 给 UI 线程
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
-
-      // 上传数据（在 TaskPool 中执行）
-      console.info('[WebDavSyncManager] Uploading data');
-      const params: BackupTaskParams = {
+      // 加密和上传数据（在 TaskPool 中执行，避免阻塞 UI）
+      console.info('[WebDavSyncManager] Starting encryption and upload in background');
+      const params: BackupTaskWithEncryptParams = {
         endpoint: this.settings.endpoint,
         username: this.settings.username,
         password: this.settings.password,
@@ -888,10 +876,10 @@ export class WebDavSyncManager {
         remoteRoot: this.settings.remoteRoot,
         manifestJson: this.manifest.toJSON(),
         backupFilePath: this.backupFilePath(),
-        backupData: enc
+        plainData: exportResult.data
       };
 
-      const task = new taskpool.Task(executeBackupUpload, params);
+      const task = new taskpool.Task(executeBackupWithEncrypt, params);
       const result = await taskpool.execute(task) as BackupTaskResult;
 
       if (result.success) {
