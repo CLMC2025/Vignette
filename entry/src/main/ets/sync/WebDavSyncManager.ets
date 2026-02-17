@@ -1092,15 +1092,38 @@ export class WebDavSyncManager {
       return await taskpool.execute(new taskpool.Task(taskFn, params)) as TResult;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      // 仅捕获 TaskPool 不支持的错误（匹配多种变体），其他错误继续抛出
-      const isCapabilityError = msg.includes('Capability not support') ||
-                                 msg.includes('Capability not supported') ||
-                                 msg.includes('TaskPool not support');
-      if (isCapabilityError) {
-        console.warn(`[WebDavSyncManager] TaskPool not supported on this device, falling back to main thread.`);
-        console.warn(`[WebDavSyncManager] UI may freeze temporarily during encryption/network operations. Error: ${msg}`);
-        return await taskFn(params);
+      
+      // 优先检查是否为 crypto 相关错误
+      // 这些错误即使 fallback 到主线程也无法解决，应该直接抛出
+      const isCryptoError = msg.includes('SecureRandomError') || 
+                            msg.includes('无法生成安全随机数') ||
+                            msg.includes('CryptoError') ||
+                            msg.includes('MAC verification failed');
+      
+      if (isCryptoError) {
+        console.error(`[WebDavSyncManager] Crypto operation failed: ${msg}`);
+        throw e instanceof Error ? e : new Error(String(e));
       }
+      
+      // 仅捕获 TaskPool 不支持的错误（匹配多种变体）
+      const isTaskPoolError = msg.includes('Capability not support') ||
+                              msg.includes('Capability not supported') ||
+                              msg.includes('TaskPool not support');
+      
+      if (isTaskPoolError) {
+        console.warn(`[WebDavSyncManager] TaskPool not supported on this device, falling back to main thread. Error: ${msg}`);
+        console.warn(`[WebDavSyncManager] UI may freeze temporarily during encryption/network operations.`);
+        try {
+          return await taskFn(params);
+        } catch (fallbackError) {
+          // 如果 fallback 也失败了，提供更有用的错误信息
+          const fbMsg = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+          console.error(`[WebDavSyncManager] Main thread fallback also failed: ${fbMsg}`);
+          throw fallbackError instanceof Error ? fallbackError : new Error(String(fallbackError));
+        }
+      }
+      
+      // 其他未知错误直接抛出
       throw e instanceof Error ? e : new Error(String(e));
     }
   }
