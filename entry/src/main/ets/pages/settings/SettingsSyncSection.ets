@@ -163,6 +163,11 @@ export struct SettingsSyncSection {
   }
 
   private async webdavRestore(): Promise<void> {
+    // Bug fix: 检查是否已经在处理中，防止重复触发
+    if (this.webdavBusy) {
+      return;
+    }
+
     // 第一层确认：点击按钮后立即弹出，防止误触
     try {
       const firstConfirm = await promptAction.showDialog({
@@ -181,14 +186,8 @@ export struct SettingsSyncSection {
       return; // 对话框被关闭，视为取消
     }
 
-    // Bug fix: 通过第一层确认后，立即设置 busy 状态并更新 UI，给充足时间让 UI 更新后再执行操作
-    this.webdavBusy = true;
-    this.webdavBackupResult = '正在从云端恢复...';
-    
-    // 给 UI 充足时间更新（200ms）
-    await new Promise<void>((resolve) => setTimeout(resolve, 200));
-
     // 执行下载和预览（内部还有第二层确认）
+    // runWebDavBackupAction 会管理 webdavBusy 状态和 UI 更新
     await this.runWebDavBackupAction(async () => this.webdavRestoreWithPreview());
   }
 
