@@ -165,8 +165,8 @@ export struct SettingsSyncSection {
     // 第一层确认：点击按钮后立即弹出，防止误触
     try {
       const firstConfirm = await promptAction.showDialog({
-        title: '⚠️ 从云端恢复',
-        message: '此操作将从云端下载备份并覆盖本地数据，本地未同步的学习记录将丢失。\n\n确定要继续吗？',
+        title: '从云端恢复',
+        message: '⚠️ 警告：此操作将从云端下载备份并覆盖本地数据，本地未同步的学习记录将丢失。\n\n确定要继续吗？',
         buttons: [
           { text: '取消', color: String(this.colors.TEXT_SECONDARY) },
           { text: '继续', color: String(this.colors.WARNING) }
