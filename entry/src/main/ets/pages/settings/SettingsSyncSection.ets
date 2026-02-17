@@ -289,7 +289,7 @@ export struct SettingsSyncSection {
   private async webdavSyncNow(): Promise<void> {
     if (this.webdavBusy) return;
     this.webdavBusy = true;
-    this.webdavResult = '正在同步数据...';
+    this.webdavResult = '正在保存设置...';
 
     // 使用更长的延迟确保 UI 更新
     await new Promise<void>((resolve) => setTimeout(resolve, 100));
@@ -305,6 +305,7 @@ export struct SettingsSyncSection {
       // 给 UI 线程时间响应
       await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
+      this.webdavResult = '正在增量同步...';
       const res = await this.runWithTimeout(() => this.webdavManager.syncIncremental(), this.OPERATION_TIMEOUT);
       this.webdavResult = res.success ? `✅ ${res.message}` : `⚠️ ${res.message}：${res.detail}`;
       promptAction.showToast({ message: res.message, duration: 1200 });
@@ -334,6 +335,18 @@ export struct SettingsSyncSection {
       this.webdavManager.setSettings(settings);
       return this.webdavManager.testConnection();
     });
+  }
+
+  private currentLoadingMessage(): string {
+    // 优先使用 webdavBackupResult（备份/恢复操作的状态）
+    if (this.webdavBackupResult.length > 0 && !this.webdavBackupResult.startsWith('✅') && !this.webdavBackupResult.startsWith('⚠️')) {
+      return this.webdavBackupResult;
+    }
+    // 其次使用 webdavResult（同步操作的状态）
+    if (this.webdavResult.length > 0 && !this.webdavResult.startsWith('✅') && !this.webdavResult.startsWith('⚠️')) {
+      return this.webdavResult;
+    }
+    return '正在处理...';
   }
 
   private validateSettings(settings: WebDavSettings): string {
@@ -538,6 +551,33 @@ export struct SettingsSyncSection {
         .fontColor(this.colors.TEXT_PRIMARY)
         .width('100%')
         .margin({ bottom: DesignTokens.Spacing.MD })
+
+      // 加载指示器区域
+      if (this.webdavBusy) {
+        Row() {
+          LoadingProgress()
+            .width(24)
+            .height(24)
+            .color(this.colors.PRIMARY)
+          
+          Text(this.currentLoadingMessage())
+            .fontSize(DesignTokens.Typography.FONT_SIZE_BASE)
+            .fontColor(this.colors.PRIMARY)
+            .fontWeight(DesignTokens.Typography.FONT_WEIGHT_MEDIUM)
+            .margin({ left: DesignTokens.Spacing.SM })
+        }
+        .width('100%')
+        .justifyContent(FlexAlign.Center)
+        .padding({ 
+          left: DesignTokens.Spacing.LG, 
+          right: DesignTokens.Spacing.LG,
+          top: DesignTokens.Spacing.SM,
+          bottom: DesignTokens.Spacing.SM
+        })
+        .backgroundColor(this.colors.PRIMARY_LIGHTEST)
+        .borderRadius(DesignTokens.BorderRadius.MD)
+        .margin({ left: DesignTokens.Spacing.LG, right: DesignTokens.Spacing.LG, bottom: DesignTokens.Spacing.MD })
+      }
 
       Row() {
         Button(this.webdavBusy ? '处理中...' : '保存设置')
