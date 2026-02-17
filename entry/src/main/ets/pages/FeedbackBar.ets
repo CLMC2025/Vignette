@@ -47,6 +47,11 @@ export struct FeedbackBar {
       vibrator.startVibration({
         type: 'time',
         duration: duration
+      }, {
+        id: 0,
+        usage: 'touch'
+      }).catch(() => {
+        // Haptic feedback not critical, silently ignore errors
       });
     } catch (e) {
       // Haptic feedback not critical, silently ignore errors

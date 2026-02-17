@@ -40,7 +40,7 @@ export abstract class BaseRepository {
   /**
    * Helper to log database errors
    */
-  protected logError(operation: string, error: unknown): void {
+  protected logError(operation: string, error: Error | string | object): void {
     const repoName = this.constructor.name;
     const errMsg = error instanceof Error ? error.message : String(error);
     console.error(`[${repoName}] ${operation} failed: ${errMsg}`);

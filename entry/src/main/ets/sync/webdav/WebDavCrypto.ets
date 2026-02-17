@@ -475,11 +475,6 @@ export class WebDavCrypto {
     console.info(`[WebDAV] crypto encrypt complete output_size=${result.length} chars ms=${elapsedMs}`);
     return result;
   }
-      ct: ctB64,
-      mac: macB64
-    };
-    return JSON.stringify(payload);
-  }
 
   static async encryptUtf8Offloaded(plainText: string, password: string): Promise<string> {
     console.info('[WebDAV] crypto encrypt mode=async');
