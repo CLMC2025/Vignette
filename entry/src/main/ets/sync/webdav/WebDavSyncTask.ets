@@ -82,6 +82,19 @@ export interface UploadTaskResult {
   detail: string;
 }
 
+// 解密任务参数
+export interface DecryptTaskParams {
+  encryptedData: string;
+  syncPassword: string;
+}
+
+// 解密任务结果
+export interface DecryptTaskResult {
+  success: boolean;
+  data: string; // 解密后的数据
+  detail: string;
+}
+
 // ==================== TaskPool 任务函数 ====================
 
 /**
@@ -389,6 +402,63 @@ export async function executeEventsUpload(params: UploadTaskParams): Promise<Upl
     const client = new WebDavClient(params.endpoint, params.username, params.password);
     const putRes = await client.put(params.remoteFile, params.data, 'application/json');
     if (putRes.statusCode < 200 || putRes.statusCode >= 300) {
+      const result: UploadTaskResult = { success: false, detail: `PUT ${putRes.statusCode}: ${putRes.body}` };
+      return result;
+    }
+    const successResult: UploadTaskResult = { success: true, detail: '' };
+    return successResult;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[WebDavSyncTask] Upload failed:', msg);
+    const errorResult: UploadTaskResult = { success: false, detail: msg };
+    return errorResult;
+  }
+}
+
+/**
+ * 执行解密任务（在 TaskPool 中运行）
+ * 专门用于备份文件的解密，避免阻塞 UI 线程
+ */
+@Concurrent
+export async function executeDecrypt(params: DecryptTaskParams): Promise<DecryptTaskResult> {
+  console.info(`[WebDavSyncTask] Starting decryption in taskpool data_size=${params.encryptedData.length} chars`);
+  const startMs = Date.now();
+
+  try {
+    console.info('[WebDavSyncTask] Decrypting data in background');
+    const plain = await WebDavCrypto.decryptUtf8Async(params.encryptedData, params.syncPassword);
+    
+    const totalMs = Date.now() - startMs;
+    console.info(`[WebDavSyncTask] Decryption complete plain_size=${plain.length} chars ms=${totalMs}`);
+    
+    const successResult: DecryptTaskResult = { 
+      success: true, 
+      data: plain, 
+      detail: '' 
+    };
+    return successResult;
+
+  } catch (ce) {
+    const errorMsg = ce instanceof CryptoError ? ce.message : String(ce);
+    const stack = ce instanceof Error ? ce.stack : '';
+    console.error(`[WebDavSyncTask] Decryption failed: ${errorMsg}`);
+    if (stack) {
+      console.error(`[WebDavSyncTask] Decryption stack: ${stack}`);
+    }
+    
+    let userFriendlyMsg = errorMsg;
+    if (errorMsg.includes('MAC verification failed')) {
+      userFriendlyMsg = '同步密码错误或云端数据已损坏';
+    }
+    
+    const errorResult: DecryptTaskResult = { 
+      success: false, 
+      data: '', 
+      detail: userFriendlyMsg 
+    };
+    return errorResult;
+  }
+}
       const result: UploadTaskResult = { success: false, detail: `PUT ${putRes.statusCode}: ${putRes.body}` };
       return result;
     }

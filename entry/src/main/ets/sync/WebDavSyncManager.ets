@@ -801,26 +801,41 @@ export class WebDavSyncManager {
       };
       const eventsDownloadResult = await taskpool.execute(new taskpool.Task(executeDownload, eventsDownloadParams)) as DownloadTaskResult;
 
+      // Bug fix: 当 MAC 校验失败时，不中止同步，而是跳过事件下载并继续上传本地数据覆盖云端
+      let eventsDownloadSkipped = false;
       if (!eventsDownloadResult.success) {
-        console.error(`[WebDavSyncManager] Step 3 failed: ${eventsDownloadResult.detail}`);
-        return WebDavSyncResult.fail('增量同步失败（事件下载）', eventsDownloadResult.detail);
+        // 检查是否为 MAC 校验失败或密码错误
+        if (eventsDownloadResult.detail.includes('MAC verification failed') || 
+            eventsDownloadResult.detail.includes('同步密码错误') ||
+            eventsDownloadResult.detail.includes('云端数据已损坏')) {
+          console.warn(`[WebDavSyncManager] Step 3 MAC verification failed, skipping download and will re-upload: ${eventsDownloadResult.detail}`);
+          eventsDownloadSkipped = true;
+        } else {
+          // 其他错误仍然返回失败
+          console.error(`[WebDavSyncManager] Step 3 failed: ${eventsDownloadResult.detail}`);
+          return WebDavSyncResult.fail('增量同步失败（事件下载）', eventsDownloadResult.detail);
+        }
       }
 
-      const step3Ms = Date.now() - step3StartMs;
-      console.info(`[WebDavSyncManager] Step 3 complete ms=${step3Ms} data_length=${eventsDownloadResult.data.length}`);
+      if (!eventsDownloadSkipped) {
+        const step3Ms = Date.now() - step3StartMs;
+        console.info(`[WebDavSyncManager] Step 3 complete ms=${step3Ms} data_length=${eventsDownloadResult.data.length}`);
 
-      // yield 给 UI 线程
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        // yield 给 UI 线程
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-      // 如果有数据，导入事件
-      if (eventsDownloadResult.data.length > 0) {
-        console.info('[WebDavSyncManager] Importing review events');
-        const events = this.parseEventsJsonl(eventsDownloadResult.data);
-        console.info(`[WebDavSyncManager] Parsed ${events.length} events, inserting to database`);
-        await dbManager.insertReviewEvents(events);
-        console.info('[WebDavSyncManager] Events inserted successfully');
+        // 如果有数据，导入事件
+        if (eventsDownloadResult.data.length > 0) {
+          console.info('[WebDavSyncManager] Importing review events');
+          const events = this.parseEventsJsonl(eventsDownloadResult.data);
+          console.info(`[WebDavSyncManager] Parsed ${events.length} events, inserting to database`);
+          await dbManager.insertReviewEvents(events);
+          console.info('[WebDavSyncManager] Events inserted successfully');
+        } else {
+          console.info('[WebDavSyncManager] No events to import');
+        }
       } else {
-        console.info('[WebDavSyncManager] No events to import');
+        console.info('[WebDavSyncManager] Step 3 skipped due to MAC verification failure');
       }
 
       // yield 给 UI 线程
@@ -869,6 +884,11 @@ export class WebDavSyncManager {
 
       const totalSyncMs = Date.now() - syncStartMs;
       console.info(`[WebDavSyncManager] ==== Sync completed successfully total_ms=${totalSyncMs} ====`);
+      
+      // 如果事件下载被跳过（因为 MAC 校验失败），提示用户事件已重新上传
+      if (eventsDownloadSkipped) {
+        return WebDavSyncResult.ok('同步完成（已重新上传事件数据覆盖云端损坏文件）');
+      }
       return WebDavSyncResult.ok('同步完成');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
