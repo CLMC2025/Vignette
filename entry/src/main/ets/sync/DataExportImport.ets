@@ -7,7 +7,7 @@ import { VersionControl } from './VersionControl';
 import { WordItem } from '../model/WordModel';
 import { util } from '@kit.ArkTS';
 import taskpool from '@ohos.taskpool';
-import { stringifyJson } from './webdav/WebDavCryptoTask';
+import { stringifyJson, parseJson } from './webdav/WebDavCryptoTask';
 
 /**
  * 导出的单词数据（智能同步释义：仅同步非 builtin 来源）
@@ -345,6 +345,63 @@ export class DataExportImport {
     } catch (e) {
       console.error('[DataExportImport] Taskpool stringify failed, falling back to sync:', e);
       return JSON.stringify(obj);
+    }
+  }
+
+  /**
+   * 从JSON字符串导入数据（异步解析版本，避免阻塞主线程）
+   */
+  async importFromJSONAsync(
+    json: string,
+    currentVersion: VersionControl
+  ): Promise<ImportResult> {
+    const result = new SyncResult();
+
+    try {
+      // 使用 taskpool 异步解析 JSON，避免阻塞主线程
+      console.info('[DataExportImport] Parsing JSON in taskpool');
+      const task = new taskpool.Task(parseJson, json);
+      const obj = await taskpool.execute(task) as ExportDataJSON;
+      console.info('[DataExportImport] JSON parsing complete');
+      
+      // 构造 ExportData
+      const importData = new ExportData();
+      if (obj.version !== undefined) {
+        importData.version = obj.version;
+      }
+      if (obj.timestamp !== undefined) {
+        importData.timestamp = obj.timestamp;
+      }
+      if (obj.appVersion !== undefined) {
+        importData.appVersion = obj.appVersion;
+      }
+      if (obj.words !== undefined) {
+        importData.words = obj.words;
+      }
+      if (obj.definitions !== undefined) {
+        importData.definitions = obj.definitions;
+      }
+      if (obj.userBooks !== undefined) {
+        importData.userBooks = obj.userBooks;
+      }
+      if (obj.versionControl !== undefined) {
+        importData.versionControl = obj.versionControl;
+      }
+      if (obj.fsrsParamsJson !== undefined) {
+        importData.fsrsParamsJson = obj.fsrsParamsJson;
+      }
+
+      // 验证数据格式
+      if (importData.version === '1.0') {
+        return this.processImportV1(importData, currentVersion, result);
+      } else {
+        result.addError(`不支持的数据版本: ${importData.version}`);
+        return { data: importData, result };
+      }
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      result.addError(`导入失败: ${errMsg}`);
+      return { data: new ExportData(), result };
     }
   }
 

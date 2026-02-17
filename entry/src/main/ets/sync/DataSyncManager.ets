@@ -216,7 +216,9 @@ export class DataSyncManager {
     this.syncStatus = SyncStatus.IMPORTING;
 
     try {
-      const importResult = this.exportImport.importFromJSON(jsonData, this.versionControl);
+      // 使用异步解析避免阻塞主线程
+      console.info('[DataSyncManager] Starting async JSON import');
+      const importResult = await this.exportImport.importFromJSONAsync(jsonData, this.versionControl);
       const data: ExportData = importResult.data;
       const result: SyncResult = importResult.result;
 
@@ -236,53 +238,75 @@ export class DataSyncManager {
         }
       }
 
-      for (const word of data.words) {
-        try {
-          const wordItem = this.convertToWordItem(word);
+      // 批量处理单词导入，每批 50 条，每批后 yield 给 UI 线程
+      const batchSize = 50;
+      console.info(`[DataSyncManager] Processing ${data.words.length} words in batches of ${batchSize}`);
+      
+      for (let i = 0; i < data.words.length; i += batchSize) {
+        const batch = data.words.slice(i, i + batchSize);
+        
+        for (const word of batch) {
+          try {
+            const wordItem = this.convertToWordItem(word);
 
-          const existing = await this.dbManager.getWordByWord(wordItem.word);
-          if (existing === null) {
-            await this.dbManager.insertWord(wordItem);
-            result.imported++;
+            const existing = await this.dbManager.getWordByWord(wordItem.word);
+            if (existing === null) {
+              await this.dbManager.insertWord(wordItem);
+              result.imported++;
 
-            this.versionControl.recordChange(
-              ChangeType.INSERT,
-              'word',
-              wordItem.id,
-              `导入单词: ${wordItem.word}`
-            );
-          } else {
-            wordItem.id = existing.id;
-            await this.dbManager.updateWord(wordItem);
-            result.updated++;
+              this.versionControl.recordChange(
+                ChangeType.INSERT,
+                'word',
+                wordItem.id,
+                `导入单词: ${wordItem.word}`
+              );
+            } else {
+              wordItem.id = existing.id;
+              await this.dbManager.updateWord(wordItem);
+              result.updated++;
 
-            this.versionControl.recordChange(
-              ChangeType.UPDATE,
-              'word',
-              wordItem.id,
-              `更新单词: ${wordItem.word}`
-            );
+              this.versionControl.recordChange(
+                ChangeType.UPDATE,
+                'word',
+                wordItem.id,
+                `更新单词: ${wordItem.word}`
+              );
+            }
+          } catch (e) {
+            const errMsg = e instanceof Error ? e.message : String(e);
+            result.addError(`导入单词失败: ${errMsg}`);
           }
-        } catch (e) {
-          const errMsg = e instanceof Error ? e.message : String(e);
-          result.addError(`导入单词失败: ${errMsg}`);
         }
-
-        if ((result.imported + result.updated) % 50 === 0) {
-          await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        
+        // 每批后 yield 给 UI 线程
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        
+        if ((i + batchSize) % 500 === 0) {
+          console.info(`[DataSyncManager] Processed ${i + batchSize}/${data.words.length} words`);
         }
       }
 
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-      for (const def of data.definitions) {
-        try {
-          const wordDef = WordDefinition.fromJSON(def.definition);
-          await this.dbManager.cacheDefinition(def.word, wordDef);
-        } catch (e) {
-          const errMsg = e instanceof Error ? e.message : String(e);
-          result.addError(`导入定义失败: ${errMsg}`);
+      // 批量处理定义
+      const defBatchSize = 100;
+      console.info(`[DataSyncManager] Processing ${data.definitions.length} definitions in batches of ${defBatchSize}`);
+      
+      for (let i = 0; i < data.definitions.length; i += defBatchSize) {
+        const batch = data.definitions.slice(i, i + defBatchSize);
+        
+        for (const def of batch) {
+          try {
+            const wordDef = WordDefinition.fromJSON(def.definition);
+            await this.dbManager.cacheDefinition(def.word, wordDef);
+          } catch (e) {
+            const errMsg = e instanceof Error ? e.message : String(e);
+            result.addError(`导入定义失败: ${errMsg}`);
+          }
         }
+        
+        // 每批后 yield 给 UI 线程
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
       }
 
       const existingUserBooks = await this.dbManager.getUserWordBooks();
@@ -338,6 +362,8 @@ export class DataSyncManager {
       this.versionControl.incrementVersion('数据导入');
 
       this.syncStatus = SyncStatus.IDLE;
+      
+      console.info(`[DataSyncManager] Import complete: imported=${result.imported}, updated=${result.updated}`);
 
       return result;
     } catch (e) {
