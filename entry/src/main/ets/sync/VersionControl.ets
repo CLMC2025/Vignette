@@ -160,6 +160,13 @@ export class VersionControl {
   }
 
   /**
+   * 更新时间戳（不增加版本号）
+   */
+  updateTimestamp(): void {
+    this.currentVersion.timestamp = Date.now();
+  }
+
+  /**
    * 记录变更
    */
   recordChange(

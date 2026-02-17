@@ -433,27 +433,18 @@ export class DataExportImport {
 
   /**
    * 处理V1版本数据导入
+   * 
+   * 注意：不再检查应用级版本号。增量同步应该在词条级别按 updatedAt 时间戳做 upsert 合并，
+   * 而不是用版本号拦截数据。这是主流应用（如 Anki、墨墨背单词）的标准做法。
    */
   private processImportV1(
     importData: ExportData,
     currentVersion: VersionControl,
     result: SyncResult
   ): ImportResult {
-    const currentVersionInfo = currentVersion.getCurrentVersion();
-    const importVersionControl = VersionControl.fromJSON(importData.versionControl);
-    const importVersionInfo = importVersionControl.getCurrentVersion();
-
-    // 版本比较
-    const comparison = VersionControl.compareVersions(currentVersionInfo, importVersionInfo);
-
-    if (comparison < 0) {
-      // 导入较新版本的数据
-      result.addError('导入的数据版本较新，建议先更新应用');
-      return { data: importData, result };
-    } else {
-      // 导入同版本或较旧版本的数据：允许导入，由上层按词条粒度合并（upsert）
-      return { data: importData, result };
-    }
+    // 移除版本号检查逻辑，直接放行所有数据
+    // 由上层（DataSyncManager.importIncremental 等方法）按词条粒度做 upsert
+    return { data: importData, result };
   }
 
   /**
