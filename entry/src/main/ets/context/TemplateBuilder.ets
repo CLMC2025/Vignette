@@ -52,6 +52,8 @@ export class TemplateBuilder {
       const idx = seed % matchingTemplates.length;
       return matchingTemplates[idx];
     }
+    // NOTE: Math.random() is acceptable here for UI/UX randomization (not security-critical)
+    // This is used only for template selection in story generation
     const randomIndex = Math.floor(Math.random() * matchingTemplates.length);
     return matchingTemplates[randomIndex];
   }
@@ -64,6 +66,7 @@ export class TemplateBuilder {
       ContextStyle.NARRATIVE,
       ContextStyle.TECHNICAL
     ];
+    // NOTE: Math.random() is acceptable here for UI/UX randomization (not security-critical)
     const idx = seed >= 0 ? (seed % styles.length) : Math.floor(Math.random() * styles.length);
     return styles[idx];
   }
@@ -106,6 +109,7 @@ export class TemplateBuilder {
       if (seed >= 0) {
         return templates[seed % templates.length];
       }
+      // NOTE: Math.random() is acceptable here for UI/UX randomization (not security-critical)
       const randomIndex = Math.floor(Math.random() * templates.length);
       return templates[randomIndex];
     }
@@ -133,6 +137,7 @@ export class TemplateBuilder {
     if (seed >= 0) {
       return bestCandidates[seed % bestCandidates.length];
     }
+    // NOTE: Math.random() is acceptable here for UI/UX randomization (not security-critical)
     const randomIndex = Math.floor(Math.random() * bestCandidates.length);
     return bestCandidates[randomIndex];
   }

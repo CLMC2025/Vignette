@@ -322,6 +322,8 @@ export class OfflineContextGenerator {
    */
   getRandomWords(count: number): WordInfo[] {
     const allWords = this.getAllWords();
+    // NOTE: Math.random() is acceptable here for UI/UX randomization (not security-critical)
+    // This is used only for shuffling word order in offline context generation
     const shuffled = allWords.sort(() => 0.5 - Math.random());
     return shuffled.slice(0, Math.min(count, allWords.length));
   }
