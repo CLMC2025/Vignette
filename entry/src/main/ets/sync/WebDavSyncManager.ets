@@ -716,7 +716,7 @@ export class WebDavSyncManager {
         manifestJson: this.manifest.toJSON(),
         remoteFile: this.wordsDeltaFilePath()
       };
-      const downloadResult = await taskpool.execute(new taskpool.Task(executeDownload, downloadParams)) as DownloadTaskResult;
+      const downloadResult = await this.executeTaskWithFallback<DownloadTaskParams, DownloadTaskResult>(executeDownload, downloadParams);
       const step1Ms = Date.now() - step1StartMs;
 
       if (!downloadResult.success) {
@@ -772,7 +772,7 @@ export class WebDavSyncManager {
           remoteFile: this.wordsDeltaFilePath(),
           plainData: exportResult.data
         };
-        const uploadResult = await taskpool.execute(new taskpool.Task(executeUploadWithEncrypt, uploadParams)) as UploadTaskResult;
+        const uploadResult = await this.executeTaskWithFallback<UploadTaskWithEncryptParams, UploadTaskResult>(executeUploadWithEncrypt, uploadParams);
 
         if (!uploadResult.success) {
           console.error(`[WebDavSyncManager] Step 2 upload failed: ${uploadResult.detail}`);
@@ -799,7 +799,7 @@ export class WebDavSyncManager {
         manifestJson: this.manifest.toJSON(),
         remoteFile: this.eventsFilePath()
       };
-      const eventsDownloadResult = await taskpool.execute(new taskpool.Task(executeDownload, eventsDownloadParams)) as DownloadTaskResult;
+      const eventsDownloadResult = await this.executeTaskWithFallback<DownloadTaskParams, DownloadTaskResult>(executeDownload, eventsDownloadParams);
 
       // Bug fix: 当 MAC 校验失败时，不中止同步，而是跳过事件下载并继续上传本地数据覆盖云端
       let eventsDownloadSkipped = false;
@@ -870,7 +870,7 @@ export class WebDavSyncManager {
           remoteFile: this.eventsFilePath(),
           plainData: eventsJsonl
         };
-        const eventsUploadResult = await taskpool.execute(new taskpool.Task(executeUploadWithEncrypt, eventsUploadParams)) as UploadTaskResult;
+        const eventsUploadResult = await this.executeTaskWithFallback<UploadTaskWithEncryptParams, UploadTaskResult>(executeUploadWithEncrypt, eventsUploadParams);
 
         if (!eventsUploadResult.success) {
           console.error(`[WebDavSyncManager] Step 4 upload failed: ${eventsUploadResult.detail}`);
@@ -970,8 +970,7 @@ export class WebDavSyncManager {
         plainData: exportResult.data
       };
 
-      const task = new taskpool.Task(executeBackupWithEncrypt, params);
-      const result = await taskpool.execute(task) as BackupTaskResult;
+      const result = await this.executeTaskWithFallback<BackupTaskWithEncryptParams, BackupTaskResult>(executeBackupWithEncrypt, params);
       const uploadMs = Date.now() - uploadStartMs;
 
       if (result.success) {
@@ -1077,6 +1076,33 @@ export class WebDavSyncManager {
           reject(err);
         });
     });
+  }
+
+  /**
+   * 尝试在 TaskPool 中执行任务，如果 TaskPool 不可用则回退到主线程执行
+   * 
+   * 注意：在主线程执行加密/解密/网络请求等耗时操作可能导致 UI 卡顿。
+   * 仅当 TaskPool 不可用时才会使用此 fallback 方案。
+   */
+  private async executeTaskWithFallback<TParams, TResult>(
+    taskFn: (params: TParams) => TResult | Promise<TResult>,
+    params: TParams
+  ): Promise<TResult> {
+    try {
+      return await taskpool.execute(new taskpool.Task(taskFn, params)) as TResult;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      // 仅捕获 TaskPool 不支持的错误（匹配多种变体），其他错误继续抛出
+      const isCapabilityError = msg.includes('Capability not support') || 
+                                 msg.includes('Capability not supported') ||
+                                 msg.includes('TaskPool not support');
+      if (isCapabilityError) {
+        console.warn(`[WebDavSyncManager] TaskPool not supported on this device, falling back to main thread.`);
+        console.warn(`[WebDavSyncManager] UI may freeze temporarily during encryption/network operations. Error: ${msg}`);
+        return await taskFn(params);
+      }
+      throw e;  // 其他错误继续向上抛出
+    }
   }
 
   async uploadWordsDelta(): Promise<WebDavSyncResult> {
