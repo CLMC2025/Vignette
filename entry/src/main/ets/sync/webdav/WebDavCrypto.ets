@@ -91,7 +91,8 @@ function fallbackRandomBytes(len: number): Uint8Array {
   const out = new Uint8Array(len);
   // Generate random bytes in 32-byte chunks using SHA-256 as a mixing function
   let offset = 0;
-  let counter = 0;
+  // Initialize counter with some randomness to avoid predictable sequences
+  let counter = Math.floor(Math.random() * 1000000);
   while (offset < len) {
     // Collect entropy from multiple sources
     const now = Date.now();
@@ -100,6 +101,7 @@ function fallbackRandomBytes(len: number): Uint8Array {
     counter++;
     
     // Create a seed string with multiple entropy sources
+    // Third Math.random() call adds additional entropy mixed into the final hash
     const seed = `${now}-${random1}-${random2}-${counter}-${offset}-${Math.random()}`;
     const seedBytes = Base64Util.utf8Encode(seed);
     
