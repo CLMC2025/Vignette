@@ -180,9 +180,11 @@ export class DataSyncManager {
       const settingsStore = SettingsStore.getInstance();
       const fsrsParams = await settingsStore.getFsrsParams();
       const fsrsParamsJson = fsrsParams !== null ? fsrsParams.toJSON() : '';
-      const jsonData = await this.exportImport.exportToJSONAsync(words, [], this.versionControl, fsrsParamsJson, exportedBooks);
-
+      
+      // 先递增版本号，确保导出的 JSON 包含递增后的版本
       this.versionControl.incrementVersion('数据导出');
+      
+      const jsonData = await this.exportImport.exportToJSONAsync(words, [], this.versionControl, fsrsParamsJson, exportedBooks);
 
       this.versionControl.recordChange(
         ChangeType.UPDATE,
