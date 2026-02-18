@@ -11,3 +11,10 @@
 **/.test
 /.appanalyzer
 /.trae/documents/
+.trae/specs/pre-release-fixes/checklist.md
+.trae/specs/pre-release-fixes/spec.md
+.trae/specs/pre-release-fixes/tasks.md
+.trae/部分日志
+build-profile.json5
+build-profile.json5
+build-profile.json5
