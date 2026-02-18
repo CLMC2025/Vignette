@@ -1,6 +1,20 @@
 {
   "app": {
-    "signingConfigs": [],
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "storeFile": "D:/OneDrive - Default Directory/桌面/证书库/weiyu_key.p12",
+          "storePassword": "0000001EBA7EA61FEAE90CED3C71AAC6E48ED7E207F460389D5FED8381FD0A1583F2FDD060BE1A59D9C065FDB2E2",
+          "keyAlias": "vignette",
+          "keyPassword": "0000001E7EAEE5263DB2BD5B4ADD0FB9CCFDB390900159A06FAC0BA8F38CC92BFBFE14EE817AFBDAE4FC283C1523",
+          "signAlg": "SHA256withECDSA",
+          "profile": "D:/OneDrive - Default Directory/桌面/证书库/weiyudanciRelease.p7b",
+          "certpath": "D:/OneDrive - Default Directory/桌面/证书库/微语单词.cer"
+        }
+      }
+    ],
     "products": [
       {
         "name": "default",
