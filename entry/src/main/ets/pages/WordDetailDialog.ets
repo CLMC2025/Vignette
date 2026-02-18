@@ -214,7 +214,7 @@ export struct WordDetailDialog {
                         .fontColor(this.colors.TEXT_SECONDARY)
                         .margin({ bottom: 8 })
 
-                      ForEach(this.dialogState.definition.commonMeanings, (meaning: WordMeaning) => {
+                      ForEach(this.dialogState.definition.commonMeanings, (meaning: WordMeaning, index: number) => {
                         Row() {
                           Text(meaning.pos)
                             .fontSize(14)
@@ -229,7 +229,7 @@ export struct WordDetailDialog {
                         }
                         .width('100%')
                         .margin({ bottom: 6 })
-                      })
+                      }, (meaning: WordMeaning, index: number) => `meaning-${index}-${meaning.pos}`)
                     }
                     .width('100%')
                     .margin({ top: 16 })

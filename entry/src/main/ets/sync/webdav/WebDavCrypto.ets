@@ -64,9 +64,16 @@ function xorBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
 
 function yieldToEventLoop(): Promise<void> {
   return new Promise<void>((resolve: () => void) => {
-    setTimeout(() => {
+    try {
+      setTimeout(() => {
+        resolve();
+      }, 0);
+    } catch (e) {
+      // setTimeout 在某些环境中不可用（如 TaskPool 线程），直接 resolve
+      // 这可能会导致 UI 短暂卡顿，但功能仍然可用
+      console.warn('[WebDavCrypto] setTimeout unavailable, yielding immediately');
       resolve();
-    }, 0);
+    }
   });
 }
 
@@ -125,15 +132,15 @@ function fallbackRandomBytes(len: number): Uint8Array {
  */
 async function randomBytes(len: number): Promise<Uint8Array> {
   try {
-    // Use cryptoFramework for secure random number generation
     const rand = cryptoFramework.createRandom();
     const randomBlob = await rand.generateRandom(len);
     return new Uint8Array(randomBlob.data);
   } catch (e) {
     const errMsg = e instanceof Error ? e.message : String(e);
-    console.warn(`[WebDavCrypto] cryptoFramework unavailable (${errMsg}), using JS fallback PRNG`);
-    console.warn('[WebDavCrypto] WARNING: JS fallback PRNG is NOT cryptographically secure. Only use in emulator/test environments.');
-    return fallbackRandomBytes(len);
+    throw new SecureRandomError(
+      `Secure random generation failed: ${errMsg}. ` +
+      `This device does not support the required cryptographic framework.`
+    );
   }
 }
 

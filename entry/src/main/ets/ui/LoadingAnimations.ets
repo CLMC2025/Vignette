@@ -206,7 +206,7 @@ struct BouncingBallsAnimation {
             })
         }
         .margin({ left: this.animSize * 0.05, right: this.animSize * 0.05 })
-      })
+      }, (index: number) => `ball-${index}`)
     }
     .width(this.animSize)
     .height(this.animSize)

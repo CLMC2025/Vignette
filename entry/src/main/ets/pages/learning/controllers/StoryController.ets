@@ -272,7 +272,7 @@ export class ReadStoryController {
               return;
             }
             this.delegate.onStoryUpgradeAvailable(upgraded.story, warningText, sourceLabel);
-          } catch (_) {}
+          } catch (_) { /* 故事升级失败，使用原始版本 */ }
         })();
       }
       return;

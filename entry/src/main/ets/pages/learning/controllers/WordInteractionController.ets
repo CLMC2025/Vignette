@@ -215,7 +215,7 @@ export class ReadWordInteractionController {
             const next = this.cloneDialogState(after);
             next.wordItem = updated;
             this.delegate.onDialogStateChange(next);
-          } catch (_) {}
+          } catch (_) { /* 更新单词失败（可能竞态），忽略 */ }
         }
       }
       console.log(`[Perf] onWordClick took ${Date.now() - startTime}ms`);

@@ -65,7 +65,7 @@ export class ReviewEventRepository extends BaseRepository {
     if (events.length === 0) return 0;
 
     let inserted = 0;
-    await this.store!.executeSql('BEGIN TRANSACTION');
+    this.store!.beginTransaction();
     try {
       for (let i = 0; i < events.length; i++) {
         const e = events[i];
@@ -91,15 +91,18 @@ export class ReviewEventRepository extends BaseRepository {
           }
         }
 
-        // 每 50 条记录 yield 一次，避免阻塞 UI
         if (i % 50 === 0 && i > 0) {
-          await new Promise<void>((resolve) => setTimeout(resolve, 0));
+          try {
+            await new Promise<void>((resolve) => setTimeout(resolve, 0));
+          } catch (e) {
+            console.warn('[ReviewEventRepository] setTimeout unavailable during batch insert, continuing');
+          }
         }
       }
-      await this.store!.executeSql('COMMIT');
+      this.store!.commit();
       return inserted;
     } catch (e) {
-      await this.store!.executeSql('ROLLBACK');
+      this.store!.rollBack();
       throw new DBError(`Batch review events insert failed: ${e instanceof Error ? e.message : String(e)}`);
     }
   }

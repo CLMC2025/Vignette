@@ -513,7 +513,7 @@ struct WordList {
                   this.selectedStatus = status;
                   this.applyFilter();
                 });
-            });
+            }, (status: StatusFilter) => status)
           }
           .width('100%')
           .margin({ top: 8 });

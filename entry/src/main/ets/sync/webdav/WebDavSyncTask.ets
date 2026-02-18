@@ -459,3 +459,149 @@ export async function executeDecrypt(params: DecryptTaskParams): Promise<Decrypt
     return errorResult;
   }
 }
+
+// ==================== 主线程执行版本（无 @Concurrent 装饰器） ====================
+
+export async function executeDownloadMainThread(params: DownloadTaskParams): Promise<DownloadTaskResult> {
+  console.info(`[WebDavSyncTask] Starting download on main thread file=${params.remoteFile}`);
+  const startMs = Date.now();
+
+  try {
+    const client = new WebDavClient(params.endpoint, params.username, params.password);
+    const getRes = await client.get(params.remoteFile);
+    
+    if (getRes.statusCode === 404) {
+      const result: DownloadTaskResult = { success: true, data: '', detail: '文件不存在' };
+      return result;
+    }
+    if (getRes.statusCode < 200 || getRes.statusCode >= 300) {
+      const result: DownloadTaskResult = { success: false, data: '', detail: `GET ${getRes.statusCode}: ${getRes.body}` };
+      return result;
+    }
+
+    let plain = '';
+    try {
+      plain = await WebDavCrypto.decryptUtf8Async(getRes.body, params.syncPassword);
+    } catch (ce) {
+      const errorMsg = ce instanceof CryptoError ? ce.message : String(ce);
+      let userFriendlyMsg = errorMsg;
+      if (errorMsg.includes('MAC verification failed')) {
+        userFriendlyMsg = '同步密码错误或云端数据已损坏';
+      }
+      const result: DownloadTaskResult = { success: false, data: '', detail: userFriendlyMsg };
+      return result;
+    }
+
+    const totalMs = Date.now() - startMs;
+    console.info(`[WebDavSyncTask] Download on main thread complete total_ms=${totalMs}`);
+    const successResult: DownloadTaskResult = { success: true, data: plain, detail: '' };
+    return successResult;
+
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[WebDavSyncTask] Download on main thread failed: ${msg}`);
+    const errorResult: DownloadTaskResult = { success: false, data: '', detail: msg };
+    return errorResult;
+  }
+}
+
+export async function executeUploadWithEncryptMainThread(params: UploadTaskWithEncryptParams): Promise<UploadTaskResult> {
+  console.info(`[WebDavSyncTask] Starting upload with encryption on main thread file=${params.remoteFile}`);
+  const startMs = Date.now();
+
+  try {
+    const encrypted = await WebDavCrypto.encryptUtf8Async(params.plainData, params.syncPassword);
+    const client = new WebDavClient(params.endpoint, params.username, params.password);
+    const putRes = await client.put(params.remoteFile, encrypted, 'application/json');
+    
+    if (putRes.statusCode < 200 || putRes.statusCode >= 300) {
+      const result: UploadTaskResult = { success: false, detail: `PUT ${putRes.statusCode}: ${putRes.body}` };
+      return result;
+    }
+
+    const totalMs = Date.now() - startMs;
+    console.info(`[WebDavSyncTask] Upload on main thread complete total_ms=${totalMs}`);
+    const successResult: UploadTaskResult = { success: true, detail: '' };
+    return successResult;
+
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[WebDavSyncTask] Upload with encryption on main thread failed: ${msg}`);
+    const errorResult: UploadTaskResult = { success: false, detail: msg };
+    return errorResult;
+  }
+}
+
+export async function executeBackupWithEncryptMainThread(params: BackupTaskWithEncryptParams): Promise<BackupTaskResult> {
+  console.info(`[WebDavSyncTask] Starting backup with encryption on main thread`);
+  const startMs = Date.now();
+
+  try {
+    const encrypted = await WebDavCrypto.encryptUtf8Async(params.plainData, params.syncPassword);
+    const client = new WebDavClient(params.endpoint, params.username, params.password);
+    const putRes = await client.put(params.backupFilePath, encrypted, 'application/json');
+    
+    if (putRes.statusCode < 200 || putRes.statusCode >= 300) {
+      const result: BackupTaskResult = {
+        success: false,
+        message: '上传失败',
+        detail: `PUT ${putRes.statusCode}: ${putRes.body}`
+      };
+      return result;
+    }
+
+    const totalMs = Date.now() - startMs;
+    console.info(`[WebDavSyncTask] Backup on main thread complete total_ms=${totalMs}`);
+    const successResult: BackupTaskResult = {
+      success: true,
+      message: '备份已上传',
+      detail: ''
+    };
+    return successResult;
+
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[WebDavSyncTask] Backup with encryption on main thread failed: ${msg}`);
+    const errorResult: BackupTaskResult = {
+      success: false,
+      message: '备份失败',
+      detail: msg
+    };
+    return errorResult;
+  }
+}
+
+export async function executeDecryptMainThread(params: DecryptTaskParams): Promise<DecryptTaskResult> {
+  console.info(`[WebDavSyncTask] Starting decryption on main thread`);
+  const startMs = Date.now();
+
+  try {
+    const plain = await WebDavCrypto.decryptUtf8Async(params.encryptedData, params.syncPassword);
+    
+    const totalMs = Date.now() - startMs;
+    console.info(`[WebDavSyncTask] Decryption on main thread complete ms=${totalMs}`);
+    
+    const successResult: DecryptTaskResult = { 
+      success: true, 
+      data: plain, 
+      detail: '' 
+    };
+    return successResult;
+
+  } catch (ce) {
+    const errorMsg = ce instanceof CryptoError ? ce.message : String(ce);
+    console.error(`[WebDavSyncTask] Decryption on main thread failed: ${errorMsg}`);
+    
+    let userFriendlyMsg = errorMsg;
+    if (errorMsg.includes('MAC verification failed')) {
+      userFriendlyMsg = '同步密码错误或云端数据已损坏';
+    }
+    
+    const errorResult: DecryptTaskResult = { 
+      success: false, 
+      data: '', 
+      detail: userFriendlyMsg 
+    };
+    return errorResult;
+  }
+}

@@ -613,7 +613,7 @@ computer`;
             .margin({ bottom: 8 })
 
             List() {
-              ForEach(this.previewResult.errors.slice(0, 10), (err: ImportErrorDetail) => {
+              ForEach(this.previewResult.errors.slice(0, 10), (err: ImportErrorDetail, index: number) => {
                 ListItem() {
                   Row() {
                     Text(`第${err.line}行`)
@@ -631,7 +631,7 @@ computer`;
                   .width('100%')
                   .padding({ top: 6, bottom: 6 })
                 }
-              })
+              }, (err: ImportErrorDetail, index: number) => `error-${index}`)
             }
             .height(Math.min(this.previewResult.errors.length * 30, 120))
 
@@ -690,7 +690,7 @@ computer`;
               .padding({ top: 8, bottom: 8 })
               .border({ width: { bottom: 1 }, color: this.colors.BORDER_LIGHT })
             }
-          })
+          }, (w: WordItem, index: number) => `word-${w.word}-${index}`)
         }
         .layoutWeight(1)
         .backgroundColor(this.colors.SURFACE_PRIMARY)

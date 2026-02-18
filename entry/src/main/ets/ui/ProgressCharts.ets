@@ -216,7 +216,7 @@ function LineChart(
           .justifyContent(FlexAlign.Center)
         }
         .position({ x: `${index * 80 + 20}vp`, y: '180vp' })
-      })
+      }, (point: ChartDataPoint, index: number) => `line-${index}-${point.label}`)
     }
     .width('100%')
     .height(200)
@@ -268,7 +268,7 @@ function BarChart(
         }
         .width('100%')
         .layoutWeight(1)
-      })
+      }, (point: ChartDataPoint, index: number) => `bar-${index}-${point.label}`)
     }
     .width('100%')
     .backgroundColor(DesignTokens.Colors.BACKGROUND_SECONDARY)
@@ -315,7 +315,7 @@ function PieChart(
       
       // 图例
       Column() {
-        ForEach(data, (point: ChartDataPoint) => {
+        ForEach(data, (point: ChartDataPoint, index: number) => {
           Row() {
             Circle({ width: 12, height: 12 })
               .fill(point.color)
@@ -333,7 +333,7 @@ function PieChart(
           .width('100%')
           .justifyContent(FlexAlign.SpaceBetween)
           .margin({ bottom: 8 })
-        })
+        }, (point: ChartDataPoint, index: number) => `pie-${index}-${point.label}`)
       }
       .layoutWeight(1)
     }
@@ -430,7 +430,7 @@ function StatsGrid(
   .columnsGap(12)
   .rowsGap(12)
   .padding(16)
-}
+}, (stat: StatsCardData, index: number) => `stat-${index}-${stat.title}`)
 
 /**
  * 学习曲线组件
@@ -501,7 +501,7 @@ function LearningCurve(
     .borderRadius(12)
     .padding(16)
   }
-}
+}, (item: LearningProgressData, index: number) => `progress-${index}-${item.date}`)
 
 /**
  * 词汇分布图表组件
@@ -558,7 +558,7 @@ function VocabularyDistribution(
   .width('100%')
   .backgroundColor(DesignTokens.Colors.SURFACE_PRIMARY)
   .borderRadius(12)
-}
+}, (item: VocabularyDistributionData, index: number) => `vocab-${index}-${item.category}`)
 
 /**
  * 综合进度面板

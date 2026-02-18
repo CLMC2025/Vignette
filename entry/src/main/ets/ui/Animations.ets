@@ -571,7 +571,7 @@ function StaggeredAnimation(
         iterations: 1,
         playMode: PlayMode.Normal
       })
-    })
+    }, (item: ESObject, index: number) => `item-${index}`)
   }
 }
 

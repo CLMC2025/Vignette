@@ -386,7 +386,7 @@ struct WordListPage {
       if (typeof v === 'string' && v.length > 0) {
         return v;
       }
-    } catch (e) {}
+    } catch (e) { /* JSON 解析失败，使用默认值 */ }
     return 'due_first';
   }
 

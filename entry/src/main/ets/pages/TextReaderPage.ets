@@ -427,7 +427,7 @@ struct TextReaderPage {
           const next = this.dialogState.clone();
           next.wordItem = updated;
           this.dialogState = next;
-        } catch (_) {}
+        } catch (_) { /* 更新单词失败（可能竞态），忽略 */ }
       }
 
       if (normalizedContext.length > 0) {

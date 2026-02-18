@@ -133,7 +133,7 @@ export struct CreateBookDialog {
                 .onClick(() => {
                   this.selectedDifficulty = difficulty;
                 });
-            });
+            }, (difficulty: string) => difficulty);
           }
           .width('100%')
           .margin({ top: 8 });

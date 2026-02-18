@@ -155,7 +155,7 @@ struct TextsPage {
         router.pushUrl({ url: 'pages/TextReaderPage', params: { textId: id } });
       } finally {
         if (file !== null) {
-          try { fs.closeSync(file); } catch (_) {}
+          try { fs.closeSync(file); } catch (_) { /* 文件已关闭或关闭失败，忽略 */ }
         }
       }
     } catch (e) {

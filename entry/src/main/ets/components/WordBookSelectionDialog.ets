@@ -327,7 +327,7 @@ export struct WordBookSelectionDialog {
                     .backgroundColor(this.selectedBookId === book.id ? DesignTokens.Colors.PRIMARY_LIGHTEST : DesignTokens.Colors.SURFACE_PRIMARY)
                     .onClick(() => this.selectWordBook(book.id))
                   }
-                })
+                }, (book: UserWordBook) => book.id)
               }
               .width('100%')
               .layoutWeight(1)

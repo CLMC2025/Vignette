@@ -100,14 +100,14 @@ export struct LearningCalendar {
             .fontColor(DesignTokens.Colors.GRAY_500)
             .width('14.28%')
             .textAlign(TextAlign.Center)
-        })
+        }, (day: string) => day)
       }
       .width('100%')
       .margin({ bottom: 8 })
 
       // Days Grid
       Flex({ wrap: FlexWrap.Wrap }) {
-        ForEach(this.getMonthDays(), (date: Date) => {
+        ForEach(this.getMonthDays(), (date: Date, index: number) => {
           Column() {
             Column() {
               // Only show day number if current month
@@ -128,7 +128,7 @@ export struct LearningCalendar {
           .height(32)
           .justifyContent(FlexAlign.Center)
           .alignItems(HorizontalAlign.Center)
-        })
+        }, (date: Date, index: number) => `day-${index}`)
       }
     }
     .width('100%')

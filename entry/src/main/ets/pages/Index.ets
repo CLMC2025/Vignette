@@ -243,7 +243,7 @@ struct Index {
     try {
       const enabled = await notificationManager.isNotificationEnabled();
       if (!enabled && this.context) {
-        try { await notificationManager.requestEnableNotification(this.context); } catch (_) {}
+        try { await notificationManager.requestEnableNotification(this.context); } catch (_) { /* 用户拒绝授权通知权限，忽略 */ }
       }
       await notificationManager.addSlot(notificationManager.SlotType.SERVICE_INFORMATION);
       const req: AppNotificationRequest = {

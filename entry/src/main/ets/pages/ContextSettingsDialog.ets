@@ -183,7 +183,7 @@ export struct ContextSettingsDialog {
                     .onClick(() => {
                       this.selectedDifficultyLevel = level;
                     })
-                })
+                }, (level: DifficultyLevel) => level.toString())
               }
               .width('100%')
               .justifyContent(FlexAlign.Start)

@@ -35,7 +35,7 @@ struct TextEditPage {
     this.isLoading = true;
     try {
       await this.dbManager.initialize(this.context!);
-    } catch (_) {}
+    } catch (_) { /* 数据库初始化失败，后续操作会处理 */ }
 
     try {
       const params = router.getParams() as TextEditPageParams;

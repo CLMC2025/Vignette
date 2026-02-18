@@ -291,7 +291,6 @@ export struct SettingsSyncSection {
     this.webdavBusy = true;
     this.webdavResult = '正在保存设置...';
 
-    // 使用更长的延迟确保 UI 更新
     await new Promise<void>((resolve) => setTimeout(resolve, 100));
 
     try {
@@ -302,12 +301,18 @@ export struct SettingsSyncSection {
         return;
       }
 
-      // 给 UI 线程时间响应
       await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
       this.webdavResult = '正在增量同步...';
       const res = await this.runWithTimeout(() => this.webdavManager.syncIncremental(), this.OPERATION_TIMEOUT);
-      this.webdavResult = res.success ? `✅ ${res.message}` : `⚠️ ${res.message}：${res.detail}`;
+
+      if (res.success) {
+        this.webdavResult = `✅ ${res.message}`;
+        this.webdavAutoSyncLastError = '';
+        await this.webdavStateStore.setAutoSyncLastError('');
+      } else {
+        this.webdavResult = `⚠️ ${res.message}：${res.detail}`;
+      }
       promptAction.showToast({ message: res.message, duration: 1200 });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

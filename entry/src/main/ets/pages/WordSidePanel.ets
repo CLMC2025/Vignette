@@ -76,7 +76,7 @@ export struct WordSidePanel {
         this.onOpenExternalDict(this.dialogState.word);
         return;
       }
-    } catch (_) {}
+    } catch (_) { /* 对话框选择取消或失败，忽略 */ }
   }
 
   build() {
@@ -206,7 +206,7 @@ export struct WordSidePanel {
                     }
                     .width('100%')
                     .margin({ bottom: idx === this.dialogState.definition!.commonMeanings.length - 1 ? 0 : 10 })
-                  })
+                  }, (meaning: WordMeaning, idx: number) => `meaning-${idx}-${meaning.pos}`)
                 } else if (this.dialogState.definition.contextMeaning.length === 0) {
                   Text('暂无释义')
                     .fontSize(14)

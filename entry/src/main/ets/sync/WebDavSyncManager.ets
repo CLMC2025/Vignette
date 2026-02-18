@@ -33,6 +33,9 @@ import {
   executeDownload, 
   executeUpload,
   executeUploadWithEncrypt,
+  executeDownloadMainThread,
+  executeUploadWithEncryptMainThread,
+  executeBackupWithEncryptMainThread,
   BackupTaskParams,
   BackupTaskWithEncryptParams,
   BackupTaskResult,
@@ -43,6 +46,16 @@ import {
   UploadTaskResult
 } from './webdav/WebDavSyncTask';
 import { WebDavCrypto } from './webdav/WebDavCrypto';
+
+// 安全的 yield 函数，处理 setTimeout 不可用的情况
+async function safeYield(): Promise<void> {
+  try {
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  } catch (e) {
+    // setTimeout 在某些环境中不可用，直接返回
+    console.warn('[WebDavSyncManager] setTimeout unavailable during yield');
+  }
+}
 
 // 复习事件行接口
 interface ReviewEventRow {
@@ -70,6 +83,7 @@ export {
 
 export class WebDavSyncManager {
   private static instance: WebDavSyncManager | null = null;
+  private static taskPoolAvailable: boolean | null = null;
 
   private status: WebDavSyncStatus = WebDavSyncStatus.IDLE;
 
@@ -698,7 +712,7 @@ export class WebDavSyncManager {
     }
 
     // yield 给 UI 线程
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    await safeYield();
 
     try {
       const syncManager = DataSyncManager.getInstance();
@@ -716,7 +730,7 @@ export class WebDavSyncManager {
         manifestJson: this.manifest.toJSON(),
         remoteFile: this.wordsDeltaFilePath()
       };
-      const downloadResult = await this.executeTaskWithFallback<DownloadTaskParams, DownloadTaskResult>(executeDownload, downloadParams);
+      const downloadResult = await this.executeTaskWithFallback<DownloadTaskParams, DownloadTaskResult>(executeDownload, executeDownloadMainThread, downloadParams);
       const step1Ms = Date.now() - step1StartMs;
 
       if (!downloadResult.success) {
@@ -727,7 +741,7 @@ export class WebDavSyncManager {
       console.info(`[WebDavSyncManager] Step 1 complete ms=${step1Ms} data_length=${downloadResult.data.length}`);
 
       // yield 给 UI 线程
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      await safeYield();
 
       // 如果有数据，导入单词
       if (downloadResult.data.length > 0) {
@@ -743,7 +757,7 @@ export class WebDavSyncManager {
       }
 
       // yield 给 UI 线程
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      await safeYield();
 
       // ========== 步骤 2: 单词上传 ==========
       console.info('[WebDavSyncManager] ===== Step 2/4: Upload words delta =====');
@@ -757,7 +771,7 @@ export class WebDavSyncManager {
       console.info(`[WebDavSyncManager] Step 2 export complete data_length=${exportResult.data.length}`);
 
       // yield 给 UI 线程
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      await safeYield();
 
       if (exportResult.data.length > 0) {
         console.info('[WebDavSyncManager] Uploading words to cloud');
@@ -772,7 +786,7 @@ export class WebDavSyncManager {
           remoteFile: this.wordsDeltaFilePath(),
           plainData: exportResult.data
         };
-        const uploadResult = await this.executeTaskWithFallback<UploadTaskWithEncryptParams, UploadTaskResult>(executeUploadWithEncrypt, uploadParams);
+        const uploadResult = await this.executeTaskWithFallback<UploadTaskWithEncryptParams, UploadTaskResult>(executeUploadWithEncrypt, executeUploadWithEncryptMainThread, uploadParams);
 
         if (!uploadResult.success) {
           console.error(`[WebDavSyncManager] Step 2 upload failed: ${uploadResult.detail}`);
@@ -785,7 +799,7 @@ export class WebDavSyncManager {
       }
 
       // yield 给 UI 线程
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      await safeYield();
 
       // ========== 步骤 3: 事件下载 ==========
       console.info('[WebDavSyncManager] ===== Step 3/4: Download events =====');
@@ -799,7 +813,7 @@ export class WebDavSyncManager {
         manifestJson: this.manifest.toJSON(),
         remoteFile: this.eventsFilePath()
       };
-      const eventsDownloadResult = await this.executeTaskWithFallback<DownloadTaskParams, DownloadTaskResult>(executeDownload, eventsDownloadParams);
+      const eventsDownloadResult = await this.executeTaskWithFallback<DownloadTaskParams, DownloadTaskResult>(executeDownload, executeDownloadMainThread, eventsDownloadParams);
 
       // Bug fix: 当 MAC 校验失败时，不中止同步，而是跳过事件下载并继续上传本地数据覆盖云端
       let eventsDownloadSkipped = false;
@@ -822,7 +836,7 @@ export class WebDavSyncManager {
         console.info(`[WebDavSyncManager] Step 3 complete ms=${step3Ms} data_length=${eventsDownloadResult.data.length}`);
 
         // yield 给 UI 线程
-        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        await safeYield();
 
         // 如果有数据，导入事件
         if (eventsDownloadResult.data.length > 0) {
@@ -839,7 +853,7 @@ export class WebDavSyncManager {
       }
 
       // yield 给 UI 线程
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      await safeYield();
 
       // ========== 步骤 4: 事件上传 ==========
       console.info('[WebDavSyncManager] ===== Step 4/4: Upload events =====');
@@ -849,7 +863,7 @@ export class WebDavSyncManager {
       console.info(`[WebDavSyncManager] Found ${events.length} events to upload`);
 
       // yield 给 UI 线程
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      await safeYield();
 
       if (events.length > 0) {
         console.info('[WebDavSyncManager] Serializing events');
@@ -857,7 +871,7 @@ export class WebDavSyncManager {
         console.info(`[WebDavSyncManager] Serialized to ${eventsJsonl.length} chars`);
 
         // yield 给 UI 线程
-        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        await safeYield();
 
         // 加密和上传数据（在 TaskPool 中执行，避免阻塞 UI）
         const eventsUploadParams: UploadTaskWithEncryptParams = {
@@ -870,7 +884,7 @@ export class WebDavSyncManager {
           remoteFile: this.eventsFilePath(),
           plainData: eventsJsonl
         };
-        const eventsUploadResult = await this.executeTaskWithFallback<UploadTaskWithEncryptParams, UploadTaskResult>(executeUploadWithEncrypt, eventsUploadParams);
+        const eventsUploadResult = await this.executeTaskWithFallback<UploadTaskWithEncryptParams, UploadTaskResult>(executeUploadWithEncrypt, executeUploadWithEncryptMainThread, eventsUploadParams);
 
         if (!eventsUploadResult.success) {
           console.error(`[WebDavSyncManager] Step 4 upload failed: ${eventsUploadResult.detail}`);
@@ -937,7 +951,7 @@ export class WebDavSyncManager {
     }
 
     // yield 给 UI 线程
-    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    await safeYield();
 
     try {
       const syncManager = DataSyncManager.getInstance();
@@ -954,7 +968,7 @@ export class WebDavSyncManager {
       console.info(`[WebDavSyncManager] Export complete data_size=${exportResult.data.length} chars ms=${exportMs}`);
 
       // yield 给 UI 线程
-      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      await safeYield();
 
       // 加密和上传数据（在 TaskPool 中执行，避免阻塞 UI）
       console.info('[WebDavSyncManager] Starting encryption and upload in background');
@@ -970,7 +984,7 @@ export class WebDavSyncManager {
         plainData: exportResult.data
       };
 
-      const result = await this.executeTaskWithFallback<BackupTaskWithEncryptParams, BackupTaskResult>(executeBackupWithEncrypt, params);
+      const result = await this.executeTaskWithFallback<BackupTaskWithEncryptParams, BackupTaskResult>(executeBackupWithEncrypt, executeBackupWithEncryptMainThread, params);
       const uploadMs = Date.now() - uploadStartMs;
 
       if (result.success) {
@@ -1083,47 +1097,62 @@ export class WebDavSyncManager {
    * 
    * 注意：在主线程执行加密/解密/网络请求等耗时操作可能导致 UI 卡顿。
    * 仅当 TaskPool 不可用时才会使用此 fallback 方案。
+   * 
+   * @param taskFn TaskPool 版本的函数（带 @Concurrent 装饰器）
+   * @param mainThreadFn 主线程版本的函数（不带 @Concurrent 装饰器）
+   * @param params 任务参数
    */
   private async executeTaskWithFallback<TParams extends Object, TResult>(
     taskFn: (params: TParams) => TResult | Promise<TResult>,
+    mainThreadFn: (params: TParams) => TResult | Promise<TResult>,
     params: TParams
   ): Promise<TResult> {
-    // Error patterns for detection
     const CRYPTO_ERROR_PATTERNS = ['SecureRandomError', '无法生成安全随机数', 'CryptoError', 'MAC verification failed'];
     const TASKPOOL_ERROR_PATTERNS = ['Capability not support', 'Capability not supported', 'TaskPool not support'];
     
+    if (WebDavSyncManager.taskPoolAvailable === false) {
+      console.info('[WebDavSyncManager] TaskPool known unavailable, executing on main thread');
+      try {
+        const result = await mainThreadFn(params);
+        console.info('[WebDavSyncManager] Main thread execution succeeded');
+        return result;
+      } catch (mainThreadError) {
+        const errMsg = mainThreadError instanceof Error ? mainThreadError.message : String(mainThreadError);
+        console.error(`[WebDavSyncManager] Main thread execution failed: ${errMsg}`);
+        throw mainThreadError instanceof Error ? mainThreadError : new Error(String(mainThreadError));
+      }
+    }
+    
     try {
+      console.info('[WebDavSyncManager] Attempting TaskPool execution');
       return await taskpool.execute(new taskpool.Task(taskFn, params)) as TResult;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[WebDavSyncManager] TaskPool execution failed: ${msg}`);
       
-      // 优先检查是否为 crypto 相关错误
-      // 这些错误即使 fallback 到主线程也无法解决，应该直接抛出
       const isCryptoError = CRYPTO_ERROR_PATTERNS.some(pattern => msg.includes(pattern));
       
       if (isCryptoError) {
-        console.error(`[WebDavSyncManager] Crypto operation failed: ${msg}`);
+        console.error(`[WebDavSyncManager] Crypto error detected, cannot fallback: ${msg}`);
         throw e instanceof Error ? e : new Error(String(e));
       }
       
-      // 仅捕获 TaskPool 不支持的错误（匹配多种变体）
       const isTaskPoolError = TASKPOOL_ERROR_PATTERNS.some(pattern => msg.includes(pattern));
       
       if (isTaskPoolError) {
-        console.warn(`[WebDavSyncManager] TaskPool not supported on this device, falling back to main thread. Error: ${msg}`);
+        console.warn(`[WebDavSyncManager] TaskPool error detected, falling back to main thread`);
+        WebDavSyncManager.taskPoolAvailable = false;
         try {
-          const result = await taskFn(params);
-          console.warn(`[WebDavSyncManager] Fallback to main thread succeeded. Note: UI may freeze during encryption/network operations.`);
+          const result = await mainThreadFn(params);
+          console.info(`[WebDavSyncManager] Main thread fallback succeeded`);
           return result;
         } catch (fallbackError) {
-          // 如果 fallback 也失败了，提供更有用的错误信息
           const fbMsg = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
           console.error(`[WebDavSyncManager] Main thread fallback also failed: ${fbMsg}`);
-          throw fallbackError instanceof Error ? fallbackError : new Error(String(fallbackError));
+          throw new Error(`主线程执行失败: ${fbMsg}（TaskPool 不可用）`);
         }
       }
       
-      // 其他未知错误直接抛出
       throw e instanceof Error ? e : new Error(String(e));
     }
   }
