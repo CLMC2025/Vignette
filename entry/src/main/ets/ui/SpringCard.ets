@@ -27,8 +27,7 @@ export struct SpringCard {
   }
 
   private getBackgroundColor(): ResourceColor {
-    const isDark = this.colors.BACKGROUND === '#1A1A1A' ||
-                   this.colors.BACKGROUND === '#121212';
+    const isDark = ThemeManager.getInstance().isDarkMode();
 
     switch (this.variant) {
       case 'elevated':
@@ -45,8 +44,7 @@ export struct SpringCard {
   }
 
   private getBorderColor(): ResourceColor {
-    const isDark = this.colors.BACKGROUND === '#1A1A1A' ||
-                   this.colors.BACKGROUND === '#121212';
+    const isDark = ThemeManager.getInstance().isDarkMode();
     if (this.variant === 'outlined') {
       return this.colors.BORDER;
     }

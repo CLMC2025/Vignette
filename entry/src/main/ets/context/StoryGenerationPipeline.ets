@@ -7,6 +7,7 @@ import { ContextStyle, DifficultyLevel } from './TemplateManager';
 import { StoryOrigin, StoryResult } from '../manager/DictionaryManager';
 import { ErrorCategory, buildUserFacingError } from '../utils/ErrorClassifier';
 import { TextSanitizer } from '../utils/TextSanitizer';
+import { HashUtils } from '../utils/HashUtils';
 
 export enum StorySource {
   AI = 'AI',
@@ -82,16 +83,7 @@ export class StoryGenerationPipeline {
     const seedStr =
       `${dayKey}|${request.targetWord}|${request.supportWords.join(',')}|${request.minWords}-${request.maxWords}` +
       `|${request.minTargetOccurrences}-${request.maxTargetOccurrences}|${request.style}|${request.difficulty}`;
-    return this.hashToUint32(seedStr);
-  }
-
-  private hashToUint32(input: string): number {
-    let hash = 2166136261;
-    for (let i = 0; i < input.length; i++) {
-      hash ^= input.charCodeAt(i);
-      hash = Math.imul(hash, 16777619);
-    }
-    return hash >>> 0;
+    return HashUtils.hashToUint32(seedStr);
   }
 
   private countWords(text: string): number {

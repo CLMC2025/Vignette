@@ -15,6 +15,7 @@ import {
 import { BookProgress } from '../model/WordBookCatalog';
 import { HeatmapDailyStats } from '../model/HeatmapData';
 import { isUniqueConstraintErrorMessage } from '../utils/DatabaseErrorUtil';
+import { HashUtils } from '../utils/HashUtils';
 
 // Repositories
 import { WordRepository, DefinitionCacheRow } from './repositories/WordRepository';
@@ -85,14 +86,7 @@ const DB_CONFIG: relationalStore.StoreConfig = {
   securityLevel: relationalStore.SecurityLevel.S1
 };
 
-function hashToUint32(input: string): number {
-  let hash = 2166136261;
-  for (let i = 0; i < input.length; i++) {
-    hash ^= input.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
+const hashToUint32 = HashUtils.hashToUint32;
 
 /**
  * Review event row for sync/optimizer

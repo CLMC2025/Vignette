@@ -574,8 +574,7 @@ export class ReadStoryController {
           this.selectedContextStyle,
           this.selectedDifficultyLevel
         );
-      } catch (e) {
-      }
+      } catch (e) { /* 预热故事变体失败，不影响主流程 */ }
       await this.delayMs(160);
     }
   }

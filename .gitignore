@@ -16,3 +16,43 @@
 .trae/specs/pre-release-fixes/tasks.md
 .trae/部分日志
 build-profile.json5
+
+# 签名和证书文件 - 绝对不能上传！
+*.p12
+*.jks
+*.csr
+*.cer
+*.p7b
+*.key
+*.keystore
+
+# HarmonyOS 特有目录
+/.preview
+/.test
+
+# 系统文件
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.temp
+*~
+
+# IDE 和编辑器
+.vscode/
+*.iml
+.idea/
+
+# 敏感配置（如果存在）
+**/secrets.*
+**/credentials.*
+**/api-keys.*
+env.local
+.env
+.env.local
+.env.*.local
+
+# 构建产物
+*.hap
+*.app
+*.so

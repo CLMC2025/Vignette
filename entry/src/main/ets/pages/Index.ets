@@ -48,6 +48,8 @@ struct Index {
 
   private storesInitialized: boolean = false;
   private privacyChecked: boolean = false;
+  private backupReminderTimer: number = -1;
+  private celebrationTimer: number = -1;
 
   aboutToAppear(): void {
     this.context = getContext(this) as common.UIAbilityContext;
@@ -62,7 +64,19 @@ struct Index {
     void this.bootstrapApp();
   }
 
+  aboutToDisappear(): void {
+    if (this.backupReminderTimer !== -1) {
+      clearTimeout(this.backupReminderTimer);
+      this.backupReminderTimer = -1;
+    }
+    if (this.celebrationTimer !== -1) {
+      clearTimeout(this.celebrationTimer);
+      this.celebrationTimer = -1;
+    }
+  }
+
   onPageShow(): void {
+    console.info(`[Index] onPageShow called`);
     this.maybeTriggerCelebration();
     AppStorage.setOrCreate('home_refresh_token', Date.now());
     if (!this.privacyChecked) {
@@ -107,7 +121,7 @@ struct Index {
   }
 
   private runDeferredTasks(): void {
-    setTimeout(() => {
+    this.backupReminderTimer = setTimeout(() => {
       void this.checkBackupReminder();
     }, 500);
   }
@@ -236,7 +250,7 @@ struct Index {
     AppStorage.setOrCreate(this.STORAGE_KEY_CELEBRATE_MS, '');
     this.celebrationSeed = this.celebrationSeed + 1;
     this.showCelebration = true;
-    setTimeout(() => { this.showCelebration = false; }, 1600);
+    this.celebrationTimer = setTimeout(() => { this.showCelebration = false; }, 1600);
   }
 
   private async publishBackupReminderNotification(): Promise<void> {

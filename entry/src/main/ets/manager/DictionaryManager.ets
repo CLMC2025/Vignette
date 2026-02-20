@@ -115,6 +115,14 @@ export class DictionaryManager implements StoryGenerator {
       return LookupResult.createFailure('Empty word');
     }
 
+    if (normalizedWord.length > 100) {
+      return LookupResult.createFailure('Word too long');
+    }
+
+    if (!/^[a-zA-Z'\-]+$/.test(normalizedWord)) {
+      return LookupResult.createFailure('Invalid word format');
+    }
+
     if (!forceAI) {
       const memoryResult = this.cache.getFromMemoryCache(normalizedWord);
       if (memoryResult !== null) {

@@ -403,6 +403,13 @@ struct ReadPage {
   private snapshotManager: ReadPageSnapshotManager = new ReadPageSnapshotManager();
   private taskManager: ReadPageTaskManager | null = null;
   private audioManager: ReadPageAudioManager | null = null;
+
+  private requireTaskManager(): ReadPageTaskManager {
+    if (this.taskManager === null) {
+      throw new Error('TaskManager not initialized');
+    }
+    return this.taskManager;
+  }
   private storyController: ReadStoryController | null = null;
   private interactionController: ReadWordInteractionController | null = null;
   private interactionDelegate: ReadWordInteractionDelegate = new ReadWordInteractionDelegateImpl(
@@ -522,7 +529,7 @@ struct ReadPage {
       this.persistenceController.applyEntriesToMap(state.todayAttemptEntries, this.todayAttemptsByWordId);
       this.persistenceController.applyEntriesToMap(state.reinforcementEntries, this.reinforcementInsertedCountByWordId);
 
-      const byIdIndex = state.currentTaskId.length > 0 ? this.taskManager!.findTaskIndexByTaskId(state.currentTaskId, this.taskQueue) : -1;
+      const byIdIndex = state.currentTaskId.length > 0 ? this.requireTaskManager().findTaskIndexByTaskId(state.currentTaskId, this.taskQueue) : -1;
       if (byIdIndex >= 0) {
         this.taskIndex = byIdIndex;
       } else {
@@ -589,9 +596,10 @@ struct ReadPage {
 
 
   private moveToTaskById(taskId: string): void {
-    const idx = this.taskManager!.findTaskIndexByTaskId(taskId, this.taskQueue);
+    const tm = this.requireTaskManager();
+    const idx = tm.findTaskIndexByTaskId(taskId, this.taskQueue);
     if (idx < 0) {
-      const nextIndex = this.taskManager!.findNextUnseenTaskIndex(this.taskIndex, this.taskQueue);
+      const nextIndex = tm.findNextUnseenTaskIndex(this.taskIndex, this.taskQueue);
       if (nextIndex >= this.taskQueue.length) {
         this.showSessionComplete();
         return;
@@ -609,10 +617,17 @@ struct ReadPage {
   }
 
   private triggerLoadCurrentTask(): void {
-    void this.loadCurrentTask().catch((err: object | string | number | boolean | null | undefined) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error('[ReadPage] loadCurrentTask failed:', msg);
-    });
+    if (this.isLoadingTask) {
+      console.warn('[ReadPage] Task loading already in progress, skipping');
+      return;
+    }
+    this.isLoadingTask = true;
+    void this.loadCurrentTask()
+      .finally(() => { this.isLoadingTask = false; })
+      .catch((err: object | string | number | boolean | null | undefined) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error('[ReadPage] loadCurrentTask failed:', msg);
+      });
   }
 
   private clearTargetHighlightTimer(): void {
@@ -829,7 +844,7 @@ struct ReadPage {
           task,
           this.currentWord,
           this.supportWords,
-          (t) => this.taskManager!.getContextIdForTask(t)
+          (t) => this.requireTaskManager().getContextIdForTask(t)
         );
         this.pendingStoryUpgradeText = '';
         this.pendingStoryUpgradeError = '';
@@ -838,9 +853,10 @@ struct ReadPage {
       }
       case BannerAction.SKIP: {
         this.hideBanner();
-        const nextId = this.taskManager!.getNextTaskIdBySequenceOrQueue(this.taskIndex, this.taskQueue);
-        this.contextSequence = this.taskManager!.getContextSequence();
-        this.contextCursor = this.taskManager!.getContextCursor();
+        const tm = this.requireTaskManager();
+        const nextId = tm.getNextTaskIdBySequenceOrQueue(this.taskIndex, this.taskQueue);
+        this.contextSequence = tm.getContextSequence();
+        this.contextCursor = tm.getContextCursor();
         if (nextId === null) {
           this.showSessionComplete();
           return;
@@ -874,6 +890,7 @@ struct ReadPage {
   private systemTts: SystemTtsManager = SystemTtsManager.getInstance();
   private dbInitInFlight: Promise<void> | null = null;
   private dialogRequestToken: number = 0;
+  private isLoadingTask: boolean = false;
   // Settings
   private readonly STORAGE_KEY_SETTINGS: string = 'app_settings';
   private settingsLoaded: boolean = false;
@@ -1202,7 +1219,7 @@ struct ReadPage {
       this.isTaskLoading = true;
 
       const result: SessionInitResult = await this.sessionManager.initializeSession(
-        (tasks: TaskItem[]) => this.taskManager!.filterOutSeenTasks(tasks)
+        (tasks: TaskItem[]) => this.requireTaskManager().filterOutSeenTasks(tasks)
       );
 
       if (result.success && result.tasks) {
@@ -1656,6 +1673,7 @@ struct ReadPage {
     console.log('[Perf] onForgetClick started');
 
     if (this.isReviewCooling || this.currentTaskReviewed) {
+      promptAction.showToast({ message: '请稍候...', duration: 500 });
       return;
     }
     this.pushHistoryBeforeReview();
@@ -1674,6 +1692,7 @@ struct ReadPage {
     console.log('[Perf] onHardClick started');
 
     if (this.isReviewCooling || this.currentTaskReviewed) {
+      promptAction.showToast({ message: '请稍候...', duration: 500 });
       return;
     }
     this.pushHistoryBeforeReview();
@@ -1695,6 +1714,7 @@ struct ReadPage {
     console.log('[Perf] onRememberClick started');
 
     if (this.isReviewCooling || this.currentTaskReviewed) {
+      promptAction.showToast({ message: '请稍候...', duration: 500 });
       return;
     }
     this.pushHistoryBeforeReview();
@@ -1714,6 +1734,7 @@ struct ReadPage {
     console.log('[Perf] onEasyClick started');
 
     if (this.isReviewCooling || this.currentTaskReviewed) {
+      promptAction.showToast({ message: '请稍候...', duration: 500 });
       return;
     }
     this.pushHistoryBeforeReview();
@@ -1754,7 +1775,7 @@ struct ReadPage {
         if (this.storyController) {
           await this.storyController.preloadStoryForTask(
             task,
-            (t) => this.taskManager!.getContextIdForTask(t),
+            (t) => this.requireTaskManager().getContextIdForTask(t),
             (contextId: string, word: string, text: string): Promise<void> => {
               if (this.contextController) {
                 return this.contextController.preGenerateContextDefinition(contextId, word, text);
@@ -1810,7 +1831,7 @@ struct ReadPage {
           this.currentTask,
           this.currentWord,
           this.storyText,
-          (t) => this.taskManager!.getContextIdForTask(t)
+          (t) => this.requireTaskManager().getContextIdForTask(t)
     );
       }
 
@@ -1848,7 +1869,7 @@ struct ReadPage {
         this.sessionManager.setTaskQueue(rebuiltQueue);
         
         const byIdIndex = snap.currentTaskId.length > 0 ? 
-          this.taskManager!.findTaskIndexByTaskId(snap.currentTaskId, rebuiltQueue) : -1;
+          this.requireTaskManager().findTaskIndexByTaskId(snap.currentTaskId, rebuiltQueue) : -1;
           
         if (byIdIndex >= 0) {
           this.sessionManager.setTaskIndex(byIdIndex);
@@ -1898,7 +1919,7 @@ struct ReadPage {
         this.currentTask,
         this.currentWord,
         this.storyText,
-        (t) => this.taskManager!.getContextIdForTask(t)
+        (t) => this.requireTaskManager().getContextIdForTask(t)
       );
       this.lastReviewHint = snap.lastReviewHint;
       this.pendingReviewReflection = snap.pendingReviewReflection;
@@ -1939,9 +1960,10 @@ struct ReadPage {
    * Move to next task in queue
    */
   private moveToNextTask(): void {
-    const nextId = this.taskManager!.getNextTaskIdBySequenceOrQueue(this.taskIndex, this.taskQueue);
-    this.contextSequence = this.taskManager!.getContextSequence();
-    this.contextCursor = this.taskManager!.getContextCursor();
+    const tm = this.requireTaskManager();
+    const nextId = tm.getNextTaskIdBySequenceOrQueue(this.taskIndex, this.taskQueue);
+    this.contextSequence = tm.getContextSequence();
+    this.contextCursor = tm.getContextCursor();
     if (nextId === null) {
       this.showSessionComplete();
       return;
@@ -2076,7 +2098,7 @@ struct ReadPage {
                       this.currentTask,
                       this.currentWord,
                       this.supportWords,
-                      (t) => this.taskManager!.getContextIdForTask(t)
+                      (t) => this.requireTaskManager().getContextIdForTask(t)
                     );
                   }
                 }
@@ -2159,7 +2181,7 @@ struct ReadPage {
                     this.currentTask,
                     this.currentWord,
                     this.supportWords,
-                    (t) => this.taskManager!.getContextIdForTask(t)
+                    (t) => this.requireTaskManager().getContextIdForTask(t)
                   );
                }
              }
@@ -2346,7 +2368,7 @@ struct ReadPage {
       this.currentTask,
       this.currentWord,
       this.storyText,
-      (t) => this.taskManager!.getContextIdForTask(t)
+      (t) => this.requireTaskManager().getContextIdForTask(t)
     );
   }
 

@@ -19,6 +19,26 @@ export enum UserWordState {
   DIFFICULT = 'difficult'  // 困难词（用户标记）
 }
 
+const USER_WORD_STATES: UserWordState[] = [
+  UserWordState.UNADDED,
+  UserWordState.ADDED,
+  UserWordState.NEW,
+  UserWordState.LEARNING,
+  UserWordState.REVIEW,
+  UserWordState.FAMILIAR,
+  UserWordState.DIFFICULT
+];
+
+const USER_WORD_STATE_VALUES: string[] = [
+  'unadded',
+  'added',
+  'new',
+  'learning',
+  'review',
+  'familiar',
+  'difficult'
+];
+
 /**
  * 用户单词进度数据
  */
@@ -369,7 +389,7 @@ export class UserStateManager {
     const stats: Map<UserWordState, number> = new Map<UserWordState, number>();
 
     // 初始化所有状态为0
-    const stateValues: UserWordState[] = Object.values(UserWordState) as UserWordState[];
+    const stateValues: UserWordState[] = USER_WORD_STATES;
     for (let i: number = 0; i < stateValues.length; i++) {
       const state: UserWordState = stateValues[i];
       stats.set(state, 0);
@@ -436,7 +456,7 @@ export class UserStateManager {
    */
   private isValidProgress(progress: object): boolean {
     const p: Record<string, object | string | number | string[]> = progress as Record<string, object | string | number | string[]>;
-    const stateValues: string[] = Object.values(UserWordState);
+    const stateValues: string[] = USER_WORD_STATE_VALUES;
     return (
       p !== null &&
       typeof p.wordId === 'string' &&

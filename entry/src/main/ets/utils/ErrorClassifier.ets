@@ -11,6 +11,9 @@ export enum ErrorCategory {
   NETWORK = 'NETWORK',
   DATA_FORMAT = 'DATA_FORMAT',
   PERMISSION = 'PERMISSION',
+  STORAGE_FULL = 'STORAGE_FULL',
+  CRYPTO_ERROR = 'CRYPTO_ERROR',
+  SESSION_EXPIRED = 'SESSION_EXPIRED',
   UNKNOWN = 'UNKNOWN'
 }
 
@@ -97,6 +100,17 @@ export function classifyError(raw: string): ErrorCategory {
     return ErrorCategory.DATA_FORMAT;
   }
 
+  // Storage / crypto errors
+  if (hasAny(lower, ['storage', 'disk', 'space', 'full', 'quota', '存储', '空间'])) {
+    return ErrorCategory.STORAGE_FULL;
+  }
+  if (hasAny(lower, ['crypto', 'encrypt', 'decrypt', 'secure random', '加密', '解密'])) {
+    return ErrorCategory.CRYPTO_ERROR;
+  }
+  if (hasAny(lower, ['session', 'expired', 'invalid session', '会话', '过期'])) {
+    return ErrorCategory.SESSION_EXPIRED;
+  }
+
   return ErrorCategory.UNKNOWN;
 }
 
@@ -174,6 +188,36 @@ export function buildUserFacingError(raw: string): ErrorInfo {
         '请检查模型是否返回了 JSON/纯文本（不要带代码块），或尝试更换模型/服务提供商。',
         true,
         true,
+        detail
+      );
+    case ErrorCategory.STORAGE_FULL:
+      return new ErrorInfo(
+        cat,
+        '存储空间不足',
+        '设备存储空间不足，无法完成操作。',
+        '请清理设备存储空间后重试。',
+        false,
+        true,
+        detail
+      );
+    case ErrorCategory.CRYPTO_ERROR:
+      return new ErrorInfo(
+        cat,
+        '加密错误',
+        '安全加密操作失败。',
+        '请确保设备支持加密功能，或尝试重新配置同步设置。',
+        false,
+        true,
+        detail
+      );
+    case ErrorCategory.SESSION_EXPIRED:
+      return new ErrorInfo(
+        cat,
+        '会话已过期',
+        '当前学习会话已过期或无效。',
+        '请重新开始学习会话。',
+        false,
+        false,
         detail
       );
     default:

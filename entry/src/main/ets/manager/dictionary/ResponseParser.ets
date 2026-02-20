@@ -1,6 +1,7 @@
 import { WordDefinition, WordMeaning, PhraseItem, ExampleItem } from '../../model/WordModel';
 import { TextSanitizer } from '../../utils/TextSanitizer';
 import { AIDefinitionResult, PhraseItemData, ExampleItemData } from './DictionaryModels';
+import { formatError } from '../../pages/settings/SettingsCommon';
 
 export class ResponseParser {
   private static instance: ResponseParser | null = null;
@@ -14,22 +15,7 @@ export class ResponseParser {
     return ResponseParser.instance;
   }
 
-  formatError(e: Error | string | object): string {
-    if (e instanceof Error) {
-      return e.message;
-    }
-    if (typeof e === 'string') {
-      return e;
-    }
-    if (typeof e === 'object' && e !== null) {
-      try {
-        return JSON.stringify(e);
-      } catch (_) {
-        return String(e);
-      }
-    }
-    return String(e);
-  }
+  formatError = formatError;
 
   parseDefinitionResponse(word: string, response: string): WordDefinition {
     try {

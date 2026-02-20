@@ -397,6 +397,12 @@ export class Elevation {
   }
 }
 
+interface SpringConfig {
+  stiffness: number;
+  damping: number;
+  mass: number;
+}
+
 export class Motion {
   static readonly DURATION_ENTER: number = 150;
   static readonly DURATION_EXIT: number = 100;
@@ -408,7 +414,7 @@ export class Motion {
   static readonly CURVE_ACCELERATE: Curve | ICurve = Curve.EaseIn;
   static readonly CURVE_SHARP: Curve | ICurve = Curve.Linear;
 
-  static readonly SPRING_CONFIG: ESObject = {
+  static readonly SPRING_CONFIG: SpringConfig = {
     stiffness: 300,
     damping: 30,
     mass: 1

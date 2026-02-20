@@ -267,21 +267,14 @@ export class ReadPageSessionManager {
   public insertTasks(tasks: TaskItem[], offset: number): void {
     if (tasks.length === 0) return;
     
-    // Sort tasks by preferred offset if needed, or just insert
-    // Assuming tasks are already ordered
-    
-    // Simple insertion logic: find optimal position
-    let insertIndex = Math.min(this.taskQueue.length, this.taskIndex + offset + 1);
-    
-    // We can just splice them in.
-    // If multiple tasks, we might want to space them out?
-    // The ReviewManager returns them.
+    const safeOffset = Math.max(0, offset);
+    const safeTaskIndex = Math.max(0, Math.min(this.taskIndex, this.taskQueue.length));
     
     for (let i = 0; i < tasks.length; i++) {
-        const task = tasks[i];
-        const taskOffset = task.preferredOffset ?? offset;
-        const idx = Math.min(this.taskQueue.length, this.taskIndex + taskOffset + 1 + i);
-        this.taskQueue.splice(idx, 0, task);
+      const task = tasks[i];
+      const taskOffset = Math.max(0, task.preferredOffset ?? safeOffset);
+      const idx = Math.min(this.taskQueue.length, safeTaskIndex + taskOffset + 1 + i);
+      this.taskQueue.splice(idx, 0, task);
     }
   }
   

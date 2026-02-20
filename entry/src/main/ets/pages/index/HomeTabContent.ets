@@ -58,7 +58,6 @@ export struct HomeTabContent {
   @State totalWords: number = 0;
   @State streakDays: number = 0;
   @State isLoading: boolean = true;
-  @State lastRefreshTime: number = 0;
   @StorageProp('home_refresh_token') @Watch('onHomeRefreshTokenChange') homeRefreshToken: number = 0;
   @StorageProp('ThemeRefreshToken') @Watch('onThemeChange') themeRefreshToken: number = 0;
   @State private colors: ColorsInterface = ThemeManager.getInstance().getColors();
@@ -83,31 +82,41 @@ export struct HomeTabContent {
     void this.loadAllData();
   }
 
-  onPageShow(): void {
-    void this.refreshDataIfNeeded();
+  aboutToDisappear(): void {
+    // Cleanup if needed
   }
 
   onHomeRefreshTokenChange(): void {
-    void this.refreshDataIfNeeded();
-  }
-
-  private async refreshDataIfNeeded(): Promise<void> {
-    const now = Date.now();
-    if (now - this.lastRefreshTime > 1000) {
-      this.lastRefreshTime = now;
-      await this.loadAllData();
-    }
+    console.info(`[HomeTabContent] onHomeRefreshTokenChange: token=${this.homeRefreshToken}`);
+    void this.loadAllData();
   }
 
   private async loadAllData(): Promise<void> {
+    console.info(`[HomeTabContent] loadAllData started`);
+    
+    let retries = 0;
+    const maxRetries = 10;
+    while (retries < maxRetries) {
+      try {
+        await this.dbManager.getWordCounts();
+        break;
+      } catch (e) {
+        retries++;
+        if (retries >= maxRetries) {
+          console.error(`[HomeTabContent] Database not initialized after ${maxRetries} retries`);
+          return;
+        }
+        await new Promise<void>(resolve => setTimeout(resolve, 100));
+      }
+    }
+    
     await Promise.all([
       this.loadSettings(),
       this.loadCurrentBook(),
       this.loadProgressData()
     ]);
-    setTimeout(() => {
-      void this.loadHeatmapData();
-    }, 100);
+    await this.loadHeatmapData();
+    console.info(`[HomeTabContent] loadAllData completed, heatmapData.length=${this.heatmapData.length}`);
   }
 
   private getStartOfDayMs(ts: number): number {
@@ -125,8 +134,11 @@ export struct HomeTabContent {
   private async loadHeatmapData(): Promise<void> {
     try {
       const range = this.getHeatmapRange();
+      console.info(`[HomeTabContent] Loading heatmap data...`);
       this.heatmapData = await this.dbManager.getHeatmapDailyStats(range.startMs, range.endMs);
+      console.info(`[HomeTabContent] Heatmap data loaded: ${this.heatmapData.length} days`);
     } catch (e) {
+      console.error(`[HomeTabContent] Failed to load heatmap data: ${e}`);
       this.heatmapData = [];
     }
   }
@@ -137,6 +149,7 @@ export struct HomeTabContent {
       today.setHours(0, 0, 0, 0);
       const todayMs = today.getTime();
       const tomorrowMs = todayMs + this.DAY_MS;
+      console.info(`[HomeTabContent] loadProgressData: todayMs=${todayMs}, tomorrowMs=${tomorrowMs}`);
 
       const currentBookId = AppStorage.get<string>(this.STORAGE_KEY_CURRENT_BOOK) ?? '';
       const progressResults = await Promise.all([
@@ -155,10 +168,11 @@ export struct HomeTabContent {
       this.newWordsToday = counts.get(WordStatus.NEW) ?? 0;
       this.reviewDue = progressResults[2] as number;
       this.totalWords = progressResults[3] as number;
+      console.info(`[HomeTabContent] loadProgressData done: todayDoneCount=${this.todayDoneCount}, reviewDue=${this.reviewDue}`);
 
       void this.loadStreakDays();
     } catch (e) {
-      // ignore
+      console.error(`[HomeTabContent] loadProgressData error: ${e}`);
     }
   }
 
@@ -686,7 +700,7 @@ export struct HomeTabContent {
               .width('100%');
 
               LearningHeatmap({
-                data: this.heatmapData,
+                data: $heatmapData,
                 columns: this.HEATMAP_COLUMNS,
                 showLegend: true,
                 onDayClick: (stats: HeatmapDailyStats) => {

@@ -1,6 +1,7 @@
 import http from '@ohos.net.http';
 import { Constants } from '../../utils/Constants';
 import { APIError } from './DictionaryModels';
+import { formatError } from '../../pages/settings/SettingsCommon';
 
 /**
  * API Message structure
@@ -219,22 +220,7 @@ export class AiClient {
     throw lastError || new APIError('Unknown error occurred');
   }
 
-  formatError(e: Error | string | object): string {
-    if (e instanceof Error) {
-      return e.message;
-    }
-    if (typeof e === 'string') {
-      return e;
-    }
-    if (typeof e === 'object' && e !== null) {
-      try {
-        return JSON.stringify(e);
-      } catch (_) {
-        return String(e);
-      }
-    }
-    return String(e);
-  }
+  formatError = formatError;
 
   private decodeResult(buf: ArrayBuffer): string {
     const u8 = new Uint8Array(buf);

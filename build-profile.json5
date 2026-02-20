@@ -5,13 +5,13 @@
         "name": "default",
         "type": "HarmonyOS",
         "material": {
-          "storeFile": "D:/OneDrive - Default Directory/桌面/证书库/weiyu_key.p12",
-          "storePassword": "0000001EBA7EA61FEAE90CED3C71AAC6E48ED7E207F460389D5FED8381FD0A1583F2FDD060BE1A59D9C065FDB2E2",
+          "storeFile": "D:/OneDrive - Default Directory/桌面/证书库/weiyu.p12",
+          "storePassword": "0000001EADEB574BF7EBA10D48CADA5C32737AE21A06EDBEDFC7553BF4A7BE120C41C72DDF379FEBD57B30E2FAC3",
           "keyAlias": "vignette",
-          "keyPassword": "0000001E7EAEE5263DB2BD5B4ADD0FB9CCFDB390900159A06FAC0BA8F38CC92BFBFE14EE817AFBDAE4FC283C1523",
+          "keyPassword": "0000001E424BBCE2DC18E9FC62EEF3A82A6AC18E666F18F953E2E91A48908C27B20A0F6157E4180DB157B46F24E4",
           "signAlg": "SHA256withECDSA",
-          "profile": "D:/OneDrive - Default Directory/桌面/证书库/weiyudanciRelease.p7b",
-          "certpath": "D:/OneDrive - Default Directory/桌面/证书库/微语单词.cer"
+          "profile": "D:/OneDrive - Default Directory/桌面/证书库/weiyuRelease.p7b",
+          "certpath": "D:/OneDrive - Default Directory/桌面/证书库/weiyu.cer"
         }
       }
     ],

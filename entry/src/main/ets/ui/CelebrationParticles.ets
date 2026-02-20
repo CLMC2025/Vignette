@@ -38,9 +38,22 @@ export struct CelebrationParticles {
   @State private particles: ParticleState[] = [];
   @State private progress: number = 0;
   @State private alpha: number = 1;
+  private timer1: number = -1;
+  private timer2: number = -1;
 
   aboutToAppear(): void {
     this.play();
+  }
+
+  aboutToDisappear(): void {
+    if (this.timer1 !== -1) {
+      clearTimeout(this.timer1);
+      this.timer1 = -1;
+    }
+    if (this.timer2 !== -1) {
+      clearTimeout(this.timer2);
+      this.timer2 = -1;
+    }
   }
 
   private play(): void {
@@ -49,13 +62,13 @@ export struct CelebrationParticles {
     this.alpha = 1;
 
     const startDelay = 10;
-    setTimeout(() => {
+    this.timer1 = setTimeout(() => {
       animateTo({ duration: 900, curve: Curve.EaseOut }, () => {
         this.progress = 1;
       });
     }, startDelay);
 
-    setTimeout(() => {
+    this.timer2 = setTimeout(() => {
       animateTo({ duration: 350, curve: Curve.EaseIn }, () => {
         this.alpha = 0;
       });

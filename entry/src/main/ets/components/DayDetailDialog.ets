@@ -37,12 +37,12 @@ export struct DayDetailDialog {
     return `${minutes} 分钟`;
   }
 
-  private getTotalReviews(): number {
-    return this.stats.totalReviews;
+  private getTotalWords(): number {
+    return this.stats.knownCount + this.stats.fuzzyCount + this.stats.forgottenCount;
   }
 
   private getPercent(value: number): number {
-    const total = this.getTotalReviews();
+    const total = this.getTotalWords();
     if (total <= 0) {
       return 0;
     }
@@ -69,7 +69,7 @@ export struct DayDetailDialog {
       .width('100%')
       .margin({ bottom: DesignTokens.Spacing.XS })
 
-      Stack() {
+      Stack({ alignContent: Alignment.Start }) {
         Row()
           .width('100%')
           .height(this.BAR_HEIGHT)
@@ -152,7 +152,7 @@ export struct DayDetailDialog {
 
             this.buildSummaryRow('新学', `${this.stats.newCount}`)
             this.buildSummaryRow('复习', `${this.stats.reviewCount}`)
-            this.buildSummaryRow('总复习次数', `${this.stats.totalReviews}`)
+            this.buildSummaryRow('总学习次数', `${this.stats.totalReviews}`)
             this.buildSummaryRow('学习时长', this.formatDuration(this.stats.durationMs))
           }
           .width('100%')
