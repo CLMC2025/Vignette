@@ -121,8 +121,8 @@ export class WebDavBackupManager {
         return new WebDavBackupPlainResult(WebDavSyncResult.fail('解密失败', decryptResult.detail), '');
       }
       plain = decryptResult.data;
-    } catch (ce) {
-      const msg = ce instanceof Error ? ce.message : String(ce);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
       return new WebDavBackupPlainResult(WebDavSyncResult.fail('解密失败', msg), '');
     }
 
@@ -180,8 +180,8 @@ export class WebDavBackupManager {
         return WebDavSyncResult.fail('解密失败', decryptResult.detail);
       }
       plain = decryptResult.data;
-    } catch (ce) {
-      const msg = ce instanceof Error ? ce.message : String(ce);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
       return WebDavSyncResult.fail('解密失败', msg);
     }
 

@@ -74,10 +74,69 @@ struct WordDetailPage {
     void this.init();
   }
 
+  onPageShow(): void {
+    // 页面显示时刷新数据，确保状态同步
+    // 使用延迟执行，避免与 init 方法的数据库查询冲突
+    setTimeout(() => {
+      void this.refreshWordData();
+    }, 100);
+  }
+
   aboutToDisappear(): void {
     if (this.audioPlayer !== null) {
       this.audioPlayer.release();
       this.audioPlayer = null;
+    }
+  }
+
+  private async refreshWordData(): Promise<void> {
+    if (this.word === null || this.wordText.trim().length === 0) {
+      return;
+    }
+    try {
+      // 优先通过 word 文本查询，因为 wordId 可能为 0（系统词书）
+      const dbWord = await this.dbManager.getWordByWord(this.word.word);
+      if (dbWord !== null) {
+        // 只有当数据库数据更新时才更新UI
+        if (this.word.id === 0 || dbWord.updatedAt > this.word.updatedAt) {
+          this.word = dbWord;
+          this.wordId = dbWord.id;
+          this.isInLearningQueueState = this.isInLearningQueue();
+          this.wordStatusRefresh = Date.now();
+          WordDetailCache.getInstance().set(dbWord);
+        }
+      }
+    } catch (e) {
+      console.warn('[WordDetailPage] refreshWordData failed:', e);
+    }
+  }
+
+  private async loadLatestWordData(): Promise<void> {
+    // 异步加载最新数据，用于缓存命中后更新
+    if (this.wordId <= 0) {
+      return;
+    }
+    try {
+      const dbWord = await this.dbManager.getWordById(this.wordId);
+      if (dbWord !== null && this.word !== null) {
+        // 只有当数据库数据更新时才更新UI
+        if (dbWord.updatedAt > this.word.updatedAt) {
+          this.word = dbWord;
+          this.isInLearningQueueState = this.isInLearningQueue();
+          this.wordStatusRefresh = Date.now();
+          WordDetailCache.getInstance().set(dbWord);
+        }
+        void this.ensureDefinitionAsync();
+
+        // 如果缺少例句或词组，自动尝试获取
+        if (dbWord.definition.phrases.length === 0 || dbWord.definition.examples.length === 0) {
+          if (this.dictManager.isConfigured()) {
+            void this.enrichDefinition();
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[WordDetailPage] loadLatestWordData failed:', e);
     }
   }
 
@@ -113,12 +172,18 @@ struct WordDetailPage {
 
       // 如果 wordId > 0，尝试从缓存或数据库获取
       if (this.wordId > 0) {
+        // 先检查缓存，如果有则立即显示（快速响应）
         const cached = WordDetailCache.getInstance().get(this.wordId);
         if (cached !== null) {
           this.word = cached;
+          this.isInLearningQueueState = this.isInLearningQueue();
           this.isLoading = false;
+          // 异步加载最新数据
+          void this.loadLatestWordData();
+          return;
         }
 
+        // 缓存未命中，从数据库获取
         const w = await this.dbManager.getWordById(this.wordId);
         if (w !== null) {
           this.word = w;
@@ -136,9 +201,29 @@ struct WordDetailPage {
           return;
         }
       }
-      
-      // wordId <= 0 或数据库中没有，使用 wordText 创建临时单词
+
+      // wordId <= 0 或数据库中没有，尝试通过 wordText 查找
       if (this.wordText.trim().length > 0) {
+        // 先尝试从数据库查找
+        const dbWord = await this.dbManager.getWordByWord(this.wordText);
+        if (dbWord !== null) {
+          this.word = dbWord;
+          this.wordId = dbWord.id;
+          this.isInLearningQueueState = this.isInLearningQueue();
+          WordDetailCache.getInstance().set(dbWord);
+          void this.ensureDefinitionAsync();
+
+          // 如果缺少例句或词组，自动尝试获取
+          if (dbWord.definition.phrases.length === 0 || dbWord.definition.examples.length === 0) {
+            if (this.dictManager.isConfigured()) {
+              void this.enrichDefinition();
+            }
+          }
+          this.isLoading = false;
+          return;
+        }
+
+        // 数据库中没有，创建临时单词
         const placeholder = new WordItem(0, this.wordText);
         this.word = placeholder;
         this.isLoading = false;
@@ -1556,7 +1641,7 @@ struct WordDetailPage {
     Column() {
       Row() {
         Column() {
-          Text('加入单词本')
+          Text('加入词书')
             .fontSize(16)
             .fontColor(DesignTokens.Colors.GRAY_900)
             .fontWeight(FontWeight.Bold)

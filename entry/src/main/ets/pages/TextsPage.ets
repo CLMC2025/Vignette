@@ -20,10 +20,31 @@ interface DialogIndexResult {
   index: number;
 }
 
+class TextItemDataSource implements IDataSource {
+  private texts: TextItem[] = [];
+
+  constructor(texts: TextItem[]) {
+    this.texts = texts;
+  }
+
+  totalCount(): number {
+    return this.texts.length;
+  }
+
+  getData(index: number): TextItem {
+    return this.texts[index];
+  }
+
+  registerDataChangeListener(listener: DataChangeListener): void {}
+
+  unregisterDataChangeListener(listener: DataChangeListener): void {}
+}
+
 @Entry
 @Component
 struct TextsPage {
   @State private texts: TextItem[] = [];
+  @State private dataSource: TextItemDataSource = new TextItemDataSource([]);
   @State private isLoading: boolean = true;
   @State private loadingHint: string = '加载中...';
   @StorageProp('ThemeRefreshToken') @Watch('onThemeChange') themeRefreshToken: number = 0;
@@ -35,6 +56,12 @@ struct TextsPage {
   aboutToAppear(): void {
     this.context = getContext(this) as common.UIAbilityContext;
     void this.ensureDBAndLoad();
+  }
+
+  onPageShow(): void {
+    if (!this.isLoading) {
+      void this.loadTexts();
+    }
   }
 
   private async ensureDBAndLoad(): Promise<void> {
@@ -60,10 +87,12 @@ struct TextsPage {
         list.push(new TextItem(r.id, r.title, r.content, sourceType, r.sourceRef, r.createdAt, r.updatedAt));
       }
       this.texts = list;
+      this.dataSource = new TextItemDataSource(list);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       this.loadingHint = `加载失败：${msg}`;
       this.texts = [];
+      this.dataSource = new TextItemDataSource([]);
     } finally {
       this.isLoading = false;
     }
@@ -227,9 +256,9 @@ struct TextsPage {
         .width('100%')
         .justifyContent(FlexAlign.Center)
       } else {
-        Scroll() {
-          Column({ space: 12 }) {
-            ForEach(this.texts, (item: TextItem) => {
+        List({ space: 12 }) {
+          LazyForEach(this.dataSource, (item: TextItem) => {
+            ListItem() {
               Column() {
                 Row() {
                   Column() {
@@ -271,13 +300,14 @@ struct TextsPage {
               .backgroundColor(this.colors.SURFACE_PRIMARY)
               .borderRadius(14)
               .onClick(() => this.openText(item))
-            }, (item: TextItem) => `text-${item.id}`)
-          }
-          .width('100%')
-          .padding({ left: 16, right: 16, bottom: 16 })
+            }
+          }, (item: TextItem) => `text-${item.id}`)
         }
+        .width('100%')
         .layoutWeight(1)
+        .cachedCount(5)
         .scrollBar(BarState.Off)
+        .padding({ left: 16, right: 16, bottom: 16 })
       }
     }
     .width('100%')

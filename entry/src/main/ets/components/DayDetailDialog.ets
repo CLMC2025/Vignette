@@ -134,6 +134,19 @@ export struct DayDetailDialog {
               .fontColor(DesignTokens.Colors.GRAY_500)
               .margin({ bottom: DesignTokens.Spacing.LG })
 
+            Row() {
+              Text('总学习量')
+                .fontSize(this.LABEL_FONT)
+                .fontColor(DesignTokens.Colors.GRAY_600)
+              Blank()
+              Text(`${this.stats.wordCount}`)
+                .fontSize(24)
+                .fontWeight(DesignTokens.Typography.FONT_WEIGHT_BOLD)
+                .fontColor(DesignTokens.Colors.PRIMARY)
+            }
+            .width('100%')
+            .margin({ bottom: DesignTokens.Spacing.LG })
+
             this.buildProgressItem({
               label: '认识',
               value: this.stats.knownCount,
@@ -152,7 +165,6 @@ export struct DayDetailDialog {
 
             this.buildSummaryRow('新学', `${this.stats.newCount}`)
             this.buildSummaryRow('复习', `${this.stats.reviewCount}`)
-            this.buildSummaryRow('总学习次数', `${this.stats.totalReviews}`)
             this.buildSummaryRow('学习时长', this.formatDuration(this.stats.durationMs))
           }
           .width('100%')

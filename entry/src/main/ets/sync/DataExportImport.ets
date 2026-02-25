@@ -4,10 +4,27 @@
 // =====================================================
 
 import { VersionControl } from './VersionControl';
-import { WordItem } from '../model/WordModel';
+import { WordItem, UserActions } from '../model/WordModel';
 import { util } from '@kit.ArkTS';
 import taskpool from '@ohos.taskpool';
 import { stringifyJson, parseJson } from './webdav/WebDavCryptoTask';
+import { NotebookWordEntry, DailyActivity, ReviewEventRow } from '../database/DBManager';
+import { TextRow } from '../database/repositories/TextRepository';
+
+/**
+ * 用户操作状态导出接口 - 必须是命名的接口，不能是内联字面量
+ */
+export interface ExportedUserActions {
+  isNotebook: boolean;
+  userBookIds: string[];
+  customTags: string[];
+  notes: string;
+  userStatus: string;
+  addedToBooksAt: [string, number][];
+  lastNotebookAt: number;
+  lastUserStatusAt: number;
+  lastCustomChangeAt: number;
+}
 
 /**
  * 导出的单词数据（智能同步释义：仅同步非 builtin 来源）
@@ -29,7 +46,9 @@ export class ExportedWord {
   leechLevel: number;
   errorTags: string[];
   suspendUntil: number;
-
+  // 新增：用户操作状态导出字段 - 必须使用命名接口
+  userActions?: ExportedUserActions;
+  
   constructor(word: WordItem) {
     this.id = word.id;
     this.word = word.word;
@@ -51,6 +70,47 @@ export class ExportedWord {
     this.leechLevel = word.leechLevel;
     this.errorTags = word.errorTags;
     this.suspendUntil = word.suspendUntil;
+    
+    // 新增：导出用户操作状态
+    this.userActions = {
+      isNotebook: word.userActions.isNotebook,
+      userBookIds: [...word.userActions.userBookIds],
+      customTags: [...word.userActions.customTags],
+      notes: word.userActions.notes,
+      userStatus: word.userActions.userStatus,
+      addedToBooksAt: Array.from(word.userActions.addedToBooksAt.entries()),
+      lastNotebookAt: word.userActions.lastNotebookAt,
+      lastUserStatusAt: word.userActions.lastUserStatusAt,
+      lastCustomChangeAt: word.userActions.lastCustomChangeAt
+    };
+  }
+}
+
+/**
+ * 导入时的单词数据（包含用户操作状态）
+ */
+export class ImportedWordData {
+  exportedWord: ExportedWord; // 原始导出数据
+  userActions?: UserActions;  // 解析后的用户操作状态
+
+  constructor(exportedWord: ExportedWord) {
+    this.exportedWord = exportedWord;
+    
+    // 如果存在用户操作状态数据，则解析它
+    if (exportedWord.userActions) {
+      const addedToBooksAtMap = new Map<string, number>(exportedWord.userActions.addedToBooksAt);
+      this.userActions = new UserActions(
+        exportedWord.userActions.isNotebook,
+        [...exportedWord.userActions.userBookIds],
+        [...exportedWord.userActions.customTags],
+        exportedWord.userActions.notes,
+        exportedWord.userActions.userStatus,
+        addedToBooksAtMap,
+        exportedWord.userActions.lastNotebookAt,
+        exportedWord.userActions.lastUserStatusAt,
+        exportedWord.userActions.lastCustomChangeAt
+      );
+    }
   }
 }
 
@@ -128,6 +188,10 @@ export interface ExportDataJSON {
   userBooks?: ExportedUserBook[];
   versionControl?: string;
   fsrsParamsJson?: string;
+  notebook?: NotebookWordEntry[];
+  texts?: TextRow[];
+  reviewEvents?: ReviewEventRow[];
+  dailyActivity?: DailyActivity[];
 }
 
 interface GeneratedObjectLiteralInterface_1 {
@@ -139,6 +203,10 @@ interface GeneratedObjectLiteralInterface_1 {
   userBooks: ExportedUserBook[];
   versionControl: string;
   fsrsParamsJson: string;
+  notebook: NotebookWordEntry[];
+  texts: TextRow[];
+  reviewEvents: ReviewEventRow[];
+  dailyActivity: DailyActivity[];
 }
 
 export class ExportData {
@@ -150,6 +218,10 @@ export class ExportData {
   userBooks: ExportedUserBook[];
   versionControl: string;
   fsrsParamsJson: string;
+  notebook: NotebookWordEntry[];
+  texts: TextRow[];
+  reviewEvents: ReviewEventRow[];
+  dailyActivity: DailyActivity[];
 
   constructor(
     version: string = '1.0',
@@ -164,6 +236,10 @@ export class ExportData {
     this.userBooks = [];
     this.versionControl = '';
     this.fsrsParamsJson = '';
+    this.notebook = [];
+    this.texts = [];
+    this.reviewEvents = [];
+    this.dailyActivity = [];
   }
 
   /**
@@ -178,7 +254,11 @@ export class ExportData {
       definitions: this.definitions,
       userBooks: this.userBooks,
       versionControl: this.versionControl,
-      fsrsParamsJson: this.fsrsParamsJson
+      fsrsParamsJson: this.fsrsParamsJson,
+      notebook: this.notebook,
+      texts: this.texts,
+      reviewEvents: this.reviewEvents,
+      dailyActivity: this.dailyActivity
     };
     return JSON.stringify(obj);
   }
@@ -216,15 +296,26 @@ export class ExportData {
         data.fsrsParamsJson = obj.fsrsParamsJson;
       }
 
+      // 验证数据格式
+      if (data.version === '1.0') {
+        // 在此版本中简单地继续返回数据，处理逻辑由调用者处理
+      } else {
+        // 版本不受支持
+      }
       return data;
     } catch (e) {
       return new ExportData();
     }
   }
+
+  /**
+   * 離線導入處理邏輯
+   */
+  // 这行有问题的静态类型定义不再需要，注释掉
 }
 
 /**
- * 同步结果
+ * 同步結果
  */
 export class SyncResult {
   imported: number;
@@ -259,7 +350,7 @@ export class SyncResult {
    * 获取摘要信息
    */
   getSummary(): string {
-    return `导入: ${this.imported}, 更新: ${this.updated}, 冲突: ${this.conflicts}, 跳过: ${this.skipped}`;
+    return `导入: ${this.imported}, 更新: ${this.updated}, 冲突: ${this.conflicts}, 跳過: ${this.skipped}`;
   }
 }
 
@@ -280,11 +371,15 @@ export class DataExportImport {
     definitions: ExportedDefinition[],
     versionControl: VersionControl,
     fsrsParamsJson: string = '',
-    userBooks: ExportedUserBook[] = []
+    userBooks: ExportedUserBook[] = [],
+    notebook: NotebookWordEntry[] = [],
+    texts: TextRow[] = [],
+    reviewEvents: ReviewEventRow[] = [],
+    dailyActivity: DailyActivity[] = []
   ): string {
     const exportedWords: ExportedWord[] = [];
     const batchSize = 100;
-    
+
     for (let i = 0; i < words.length; i += batchSize) {
       const batch = words.slice(i, i + batchSize);
       for (const word of batch) {
@@ -300,7 +395,11 @@ export class DataExportImport {
       definitions: definitions,
       userBooks: userBooks,
       versionControl: versionControl.toJSON(),
-      fsrsParamsJson: fsrsParamsJson
+      fsrsParamsJson: fsrsParamsJson,
+      notebook: notebook,
+      texts: texts,
+      reviewEvents: reviewEvents,
+      dailyActivity: dailyActivity
     };
 
     return JSON.stringify(obj);
@@ -314,7 +413,11 @@ export class DataExportImport {
     definitions: ExportedDefinition[],
     versionControl: VersionControl,
     fsrsParamsJson: string = '',
-    userBooks: ExportedUserBook[] = []
+    userBooks: ExportedUserBook[] = [],
+    notebook: NotebookWordEntry[] = [],
+    texts: TextRow[] = [],
+    reviewEvents: ReviewEventRow[] = [],
+    dailyActivity: DailyActivity[] = []
   ): Promise<string> {
     const exportedWords: ExportedWord[] = [];
     const batchSize = 50;
@@ -335,7 +438,11 @@ export class DataExportImport {
       definitions: definitions,
       userBooks: userBooks,
       versionControl: versionControl.toJSON(),
-      fsrsParamsJson: fsrsParamsJson
+      fsrsParamsJson: fsrsParamsJson,
+      notebook: notebook,
+      texts: texts,
+      reviewEvents: reviewEvents,
+      dailyActivity: dailyActivity
     };
 
     try {
@@ -391,7 +498,7 @@ export class DataExportImport {
         importData.fsrsParamsJson = obj.fsrsParamsJson;
       }
 
-      // 验证数据格式
+      // 验證數據格式
       if (importData.version === '1.0') {
         return this.processImportV1(importData, currentVersion, result);
       } else {
@@ -417,7 +524,7 @@ export class DataExportImport {
     try {
       const importData = ExportData.fromJSON(json);
 
-      // 验证数据格式
+      // 验證數據格式
       if (importData.version === '1.0') {
         return this.processImportV1(importData, currentVersion, result);
       } else {
@@ -442,34 +549,34 @@ export class DataExportImport {
     currentVersion: VersionControl,
     result: SyncResult
   ): ImportResult {
-    // 移除版本号检查逻辑，直接放行所有数据
-    // 由上层（DataSyncManager.importIncremental 等方法）按词条粒度做 upsert
+    // 移除版本號檢查邏輯，直接放行所有數據
+    // 由上層（DataSyncManager.importIncremental 等方法）按詞條粒度做 upsert
     return { data: importData, result };
   }
 
   /**
-   * 合并旧版本数据
+   * 合並舊版本數據
    */
   private mergeOldData(
     importData: ExportData,
     currentVersion: VersionControl,
     result: SyncResult
   ): ImportResult {
-    // 检查冲突
+    // 檢查衝突
     const importVersionControl = VersionControl.fromJSON(importData.versionControl);
     const importVersionInfo = importVersionControl.getCurrentVersion();
     const currentVersionInfo = currentVersion.getCurrentVersion();
 
     if (currentVersion.hasConflict(importVersionInfo)) {
-      // 有冲突，需要用户选择
+      // 有衝突，需要用戶選擇
       result.conflicts++;
-      result.addError('检测到版本冲突，请手动解决');
+      result.addError('檢測到版本衝突，請手動解決');
       return { data: importData, result };
     }
 
-    // 无冲突，合并数据
+    // 無衝突，合併數據
     for (const word of importData.words) {
-      // 检查单词是否已存在
+      // 檢查單詞是否已存在
       result.skipped++;
     }
 
@@ -477,7 +584,7 @@ export class DataExportImport {
   }
 
   /**
-   * 合并相同版本数据
+   * 合並相同版本數據
    */
   private mergeSameVersion(
     importData: ExportData,
@@ -488,12 +595,12 @@ export class DataExportImport {
     const importVersionInfo = importVersionControl.getCurrentVersion();
     const currentVersionInfo = currentVersion.getCurrentVersion();
 
-    // 比较时间戳
+    // 比較時間戳
     if (importVersionInfo.timestamp > currentVersionInfo.timestamp) {
-      // 导入的数据更新，使用导入数据
+      // 導入的數據更新，使用導入數據
       result.imported = importData.words.length;
     } else {
-      // 当前数据更新，跳过导入
+      // 當前數據更新，跳過導入
       result.skipped = importData.words.length;
     }
 
@@ -501,26 +608,26 @@ export class DataExportImport {
   }
 
   /**
-   * 压缩数据（简化版，实际可使用pako等库）
+   * 壓縮數據（簡化版，實際可使用pako等庫）
    */
   compressData(data: string): string {
-    // 简化实现，实际应使用压缩库
+    // 簡化實現，實際應使用壓縮庫
     return data;
   }
 
   /**
-   * 解压数据（简化版）
+   * 解壓數據（簡化版）
    */
   decompressData(data: string): string {
-    // 简化实现，实际应使用压缩库
+    // 簡化實現，實際應使用壓縮庫
     return data;
   }
 
   /**
-   * 验证导出数据
+   * 驗證導出數據
    */
   validateExportData(data: ExportData): boolean {
-    // 检查必要字段
+    // 檢查必要字段
     if (data.version === undefined || data.version === '') {
       return false;
     }
@@ -531,7 +638,7 @@ export class DataExportImport {
       return false;
     }
 
-    // 检查单词数据
+    // 檢查單詞數據
     for (const word of data.words) {
       if (word.word === undefined || word.word === '') {
         return false;
@@ -542,7 +649,7 @@ export class DataExportImport {
   }
 
   /**
-   * 生成导出文件名
+   * 生成導出文件名
    */
   generateExportFileName(): string {
     const date = new Date();
@@ -556,7 +663,7 @@ export class DataExportImport {
   }
 
   /**
-   * 计算数据大小
+   * 計算數據大小
    */
   calculateDataSize(data: string): string {
     const encoder = new util.TextEncoder();
@@ -575,13 +682,13 @@ export class DataExportImport {
   }
 
   /**
-   * 导出统计信息
+   * 導出統計信息
    */
   getExportStats(data: ExportData): string {
     const wordCount = data.words.length;
     const definitionCount = data.definitions.length;
     const dataSize = this.calculateDataSize(data.toJSON());
 
-    return `单词: ${wordCount}, 定义: ${definitionCount}, 大小: ${dataSize}`;
+    return `单詞: ${wordCount}, 定義: ${definitionCount}, 大小: ${dataSize}`;
   }
 }

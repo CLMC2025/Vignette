@@ -114,16 +114,33 @@ export class ReadStoryController {
     return this.preloadedStoryCache.has(taskId);
   }
 
+  public isPreloadedStoryUpgrading(taskId: string): boolean {
+    const cached = this.preloadedStoryCache.get(taskId);
+    if (cached === undefined) {
+      return false;
+    }
+    return cached.isUpgrading;
+  }
+
+  public shouldWaitForUpgrade(taskId: string): boolean {
+    const cached = this.preloadedStoryCache.get(taskId);
+    if (cached === undefined) {
+      return false;
+    }
+    // 如果正在升级且当前是离线或最小兜底，应该等待
+    return cached.isUpgrading && (cached.sourceLabel.includes('离线') || cached.sourceLabel.includes('最小'));
+  }
+
   public restorePreloadedStory(taskId: string, story: PreloadedStory): void {
     this.preloadedStoryCache.set(taskId, story);
   }
 
   public getContextWordCountRange(word: WordItem): WordCountRange {
-    if (this.newbieMode) {
-      return { minWords: 50, maxWords: 70 } as WordCountRange;
-    }
     if (this.contextLengthMin > 0 && this.contextLengthMax > 0) {
       return { minWords: this.contextLengthMin, maxWords: this.contextLengthMax } as WordCountRange;
+    }
+    if (this.newbieMode) {
+      return { minWords: 50, maxWords: 70 } as WordCountRange;
     }
     const difficulty = word.fsrsState.difficulty;
     if (difficulty >= 6) {
@@ -447,13 +464,16 @@ export class ReadStoryController {
     }
 
     const storyWords = this.parseStoryIntoWordsForText(outcome.story, word.word, supportWords);
+    const isOfflineOrMinimal = outcome.source === StorySource.OFFLINE || outcome.source === StorySource.MINIMAL;
     this.preloadedStoryCache.set(task.id, {
       targetWord: word.word,
       text: outcome.story,
       words: storyWords,
       error: outcome.warningMessage,
       supportWords: supportWords,
-      sourceLabel: this.getStorySourceLabel(outcome.source)
+      sourceLabel: this.getStorySourceLabel(outcome.source),
+      isUpgraded: false,
+      isUpgrading: upgradePromise !== null && isOfflineOrMinimal
     });
     void preGenerateContextDefinition(getContextIdForTask(task), word.word, outcome.story);
 
@@ -485,7 +505,9 @@ export class ReadStoryController {
             words: upgradedWords,
             error: upgraded.warningMessage,
             supportWords: supportWords,
-            sourceLabel: this.getStorySourceLabel(upgraded.source)
+            sourceLabel: this.getStorySourceLabel(upgraded.source),
+            isUpgraded: true,
+            isUpgrading: false
           });
           void preGenerateContextDefinition(getContextIdForTask(task), wordAtStart, upgraded.story);
         } catch (e) {

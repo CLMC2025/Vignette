@@ -1,6 +1,7 @@
 import promptAction from '@ohos.promptAction';
 import { DesignTokens } from '../model/DesignTokens';
 import { HeatmapDailyStats } from '../model/HeatmapData';
+import { DateUtils } from '../utils/DateUtils';
 
 interface HeatmapCell {
   dateMs: number;
@@ -32,6 +33,11 @@ export struct LearningHeatmap {
 
   private dataMapCache: Map<number, HeatmapDailyStats> | null = null;
   private lastDataLength: number = -1;
+  private lastDataHash: string = '';
+
+  // Timer handles for cleanup
+  private pressTimer: number = -1;
+  private scrollTimer: number = -1;
 
   private onDataChange(): void {
     console.info(`[LearningHeatmap] onDataChange: data.length=${this.data.length}`);
@@ -45,18 +51,33 @@ export struct LearningHeatmap {
     this.renderVersion++;
   }
 
+  aboutToDisappear(): void {
+    // Clean up all timers to prevent memory leaks
+    if (this.pressTimer !== -1) {
+      clearTimeout(this.pressTimer);
+      this.pressTimer = -1;
+    }
+    if (this.scrollTimer !== -1) {
+      clearTimeout(this.scrollTimer);
+      this.scrollTimer = -1;
+    }
+  }
+
   aboutToUpdate(): void {
     console.info(`[LearningHeatmap] aboutToUpdate: data.length=${this.data.length}`);
     this.cachedColumns = this.buildColumns();
   }
 
   private getStartOfDayMs(ts: number): number {
-    const d = new Date(ts);
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0).getTime();
+    const result = DateUtils.getStartOfDayMs(ts);
+    console.info(`[LearningHeatmap] getStartOfDayMs: input=${ts}, result=${result}, formatted=${DateUtils.formatDebugDate(result)}`);
+    return result;
   }
 
   private buildDataMap(): Map<number, HeatmapDailyStats> {
-    if (this.dataMapCache !== null && this.lastDataLength === this.data.length) {
+    // Calculate hash of data content to detect changes
+    const dataHash = this.calculateDataHash();
+    if (this.dataMapCache !== null && this.lastDataHash === dataHash) {
       return this.dataMapCache;
     }
 
@@ -64,20 +85,31 @@ export struct LearningHeatmap {
     for (const item of this.data) {
       const dayKey = this.getStartOfDayMs(item.dateMs);
       map.set(dayKey, item);
-      console.info(`[LearningHeatmap] buildDataMap: dateMs=${item.dateMs}, dayKey=${dayKey}, totalReviews=${item.totalReviews}`);
+      console.info(`[LearningHeatmap] buildDataMap: dateMs=${item.dateMs}, dayKey=${dayKey}, wordCount=${item.wordCount}`);
     }
     console.info(`[LearningHeatmap] buildDataMap: total ${map.size} days`);
 
     this.dataMapCache = map;
-    this.lastDataLength = this.data.length;
+    this.lastDataHash = dataHash;
     return map;
   }
 
-  private getLevel(total: number): number {
-    if (total <= 0) return 0;
-    if (total >= 50) return 4;
-    if (total >= 20) return 3;
-    if (total >= 5) return 2;
+  private calculateDataHash(): string {
+    // Simple hash based on data content
+    let hash = 0;
+    for (const item of this.data) {
+      hash = ((hash << 5) - hash) + item.dateMs;
+      hash = ((hash << 5) - hash) + item.wordCount;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return `${this.data.length}_${hash}`;
+  }
+
+  private getLevel(wordCount: number): number {
+    if (wordCount <= 0) return 0;
+    if (wordCount >= 50) return 4;
+    if (wordCount >= 20) return 3;
+    if (wordCount >= 5) return 2;
     return 1;
   }
 
@@ -103,7 +135,9 @@ export struct LearningHeatmap {
     }
 
     const dataMap = this.buildDataMap();
-    const todayStart = this.getStartOfDayMs(Date.now());
+    const now = Date.now();
+    const todayStart = this.getStartOfDayMs(now);
+    console.info(`[LearningHeatmap] buildColumns: now=${now}, todayStart=${todayStart}, todayStartDate=${new Date(todayStart).toISOString()}`);
 
     const endDate = new Date(todayStart);
     const endDayOfWeek = endDate.getDay();
@@ -124,8 +158,8 @@ export struct LearningHeatmap {
         if (stats) {
           matchedDays++;
         }
-        const total = stats ? stats.totalReviews : 0;
-        const level = this.getLevel(total);
+        const wordCount = stats ? stats.wordCount : 0;
+        const level = this.getLevel(wordCount);
 
         columns[col].push({
           dateMs: dateMs,
@@ -152,7 +186,8 @@ export struct LearningHeatmap {
       newCount: 0,
       reviewCount: 0,
       durationMs: 0,
-      totalReviews: 0
+      totalReviews: 0,
+      wordCount: 0
     };
   }
 
@@ -183,9 +218,9 @@ export struct LearningHeatmap {
       return;
     }
     const dateText = this.formatDate(cell.dateMs);
-    const reviewCount = cell.stats ? cell.stats.totalReviews : 0;
+    const wordCount = cell.stats ? cell.stats.wordCount : 0;
     promptAction.showToast({
-      message: `${dateText} - 复习${reviewCount}次`,
+      message: `${dateText} - 学习${wordCount}词`,
       duration: 1500
     });
   }
@@ -224,8 +259,12 @@ export struct LearningHeatmap {
         if (event.type === TouchType.Down) {
           this.pressedCellKey = this.getCellKey(col, row);
         } else if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
-          setTimeout(() => {
+          if (this.pressTimer !== -1) {
+            clearTimeout(this.pressTimer);
+          }
+          this.pressTimer = setTimeout(() => {
             this.pressedCellKey = '';
+            this.pressTimer = -1;
           }, 100);
         }
       })
@@ -299,8 +338,12 @@ export struct LearningHeatmap {
         .scrollBar(BarState.Off)
         .layoutWeight(1)
         .onAppear(() => {
-          setTimeout(() => {
+          if (this.scrollTimer !== -1) {
+            clearTimeout(this.scrollTimer);
+          }
+          this.scrollTimer = setTimeout(() => {
             this.scroller.scrollEdge(Edge.End);
+            this.scrollTimer = -1;
           }, 100);
         })
       }
@@ -327,8 +370,7 @@ export struct CompactHeatmap {
   @Prop maxDays: number = 30;
 
   private getStartOfDayMs(ts: number): number {
-    const d = new Date(ts);
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0).getTime();
+    return DateUtils.getStartOfDayMs(ts);
   }
 
   private buildRecentData(): HeatmapDailyStats[] {
@@ -354,7 +396,8 @@ export struct CompactHeatmap {
           newCount: 0,
           reviewCount: 0,
           durationMs: 0,
-          totalReviews: 0
+          totalReviews: 0,
+          wordCount: 0
         });
       }
     }
@@ -391,7 +434,7 @@ export struct CompactHeatmap {
           .width(8)
           .height(32)
           .borderRadius(2)
-          .backgroundColor(this.getColor(this.getLevel(stats.totalReviews, 20)))
+          .backgroundColor(this.getColor(this.getLevel(stats.wordCount, 20)))
       }, (stats: HeatmapDailyStats) => stats.dateMs.toString())
     }
     .width('100%')
@@ -402,6 +445,10 @@ export struct CompactHeatmap {
 export struct WeeklyHeatmapBar {
   @Prop data: HeatmapDailyStats[] = [];
 
+  private getStartOfDayMs(ts: number): number {
+    return DateUtils.getStartOfDayMs(ts);
+  }
+
   private getWeekData(): number[] {
     const todayStart = this.getStartOfDayMs(Date.now());
     const weekStart = todayStart - 6 * 24 * 60 * 60 * 1000;
@@ -409,7 +456,7 @@ export struct WeeklyHeatmapBar {
     const dataMap: Map<number, number> = new Map();
 
     for (const item of this.data) {
-      dataMap.set(this.getStartOfDayMs(item.dateMs), item.totalReviews);
+      dataMap.set(this.getStartOfDayMs(item.dateMs), item.wordCount);
     }
 
     for (let i = 0; i < 7; i++) {
@@ -418,11 +465,6 @@ export struct WeeklyHeatmapBar {
     }
 
     return result;
-  }
-
-  private getStartOfDayMs(ts: number): number {
-    const d = new Date(ts);
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0).getTime();
   }
 
   private getDayLabel(index: number): string {

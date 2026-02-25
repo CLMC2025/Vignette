@@ -3,6 +3,7 @@ import type common from '@ohos.app.ability.common';
 
 import { AppSettings } from '../model/WordModel';
 import { FsrsParamsPack } from '../model/FsrsParamsPack';
+import { StorageError, StorageErrorType } from './StorageError';
 
 export interface SettingsStringPreferences {
   get(key: string, defValue: string): Promise<string>;
@@ -51,6 +52,16 @@ export class InMemorySettingsPreferences implements SettingsStringPreferences {
   }
 }
 
+export interface SettingsLoadResult {
+  settings: AppSettings | null;
+  error?: StorageError;
+}
+
+export interface InitializationStateResult {
+  initialized: boolean;
+  error: StorageError | null;
+}
+
 export class SettingsStore {
   private static readonly PREFERENCES_NAME: string = 'settings_store';
   private static readonly SETTINGS_JSON_KEY: string = 'app_settings_json';
@@ -62,6 +73,7 @@ export class SettingsStore {
   private prefs: SettingsStringPreferences | null = null;
   private isInitialized: boolean = false;
   private abilityContext: common.UIAbilityContext | null = null;
+  private lastInitError: StorageError | null = null;
 
   private constructor() {}
 
@@ -79,6 +91,7 @@ export class SettingsStore {
   injectPreferencesForTest(prefs: SettingsStringPreferences): void {
     this.prefs = prefs;
     this.isInitialized = true;
+    this.lastInitError = null;
   }
 
   async initialize(): Promise<boolean> {
@@ -86,21 +99,36 @@ export class SettingsStore {
       return true;
     }
     if (this.abilityContext === null) {
+      this.lastInitError = StorageError.contextNotInjected();
+      console.error('[SettingsStore] initialize: abilityContext is not available');
       return false;
     }
     try {
       const raw = await preferences.getPreferences(this.abilityContext, SettingsStore.PREFERENCES_NAME);
       this.prefs = new PreferencesStringAdapter(raw);
       this.isInitialized = true;
+      this.lastInitError = null;
       console.info('[SettingsStore] Preferences initialized successfully');
       return true;
     } catch (e) {
-      const errMsg = e instanceof Error ? e.message : String(e);
-      console.error(`[SettingsStore] Failed to initialize preferences: ${errMsg}`);
+      const originalError = e instanceof Error ? e : new Error(String(e));
+      this.lastInitError = StorageError.initializationFailed(originalError);
+      console.error(`[SettingsStore] Failed to initialize preferences: ${originalError.message}`);
       this.prefs = null;
       this.isInitialized = false;
       return false;
     }
+  }
+
+  getLastInitError(): StorageError | null {
+    return this.lastInitError;
+  }
+
+  getInitializationState(): InitializationStateResult {
+    return {
+      initialized: this.isInitialized,
+      error: this.lastInitError
+    } as InitializationStateResult;
   }
 
   private async ensureInitialized(): Promise<boolean> {
@@ -112,9 +140,11 @@ export class SettingsStore {
 
   async saveSettings(settings: AppSettings): Promise<boolean> {
     if (!await this.ensureInitialized()) {
+      console.error('[SettingsStore] saveSettings: Storage not initialized');
       return false;
     }
     if (this.prefs === null) {
+      console.error('[SettingsStore] saveSettings: Preferences is null after initialization');
       return false;
     }
     try {
@@ -131,9 +161,11 @@ export class SettingsStore {
 
   async getSettings(): Promise<AppSettings | null> {
     if (!await this.ensureInitialized()) {
+      console.error('[SettingsStore] getSettings: Storage not initialized');
       return null;
     }
     if (this.prefs === null) {
+      console.error('[SettingsStore] getSettings: Preferences is null after initialization');
       return null;
     }
     try {
@@ -149,6 +181,38 @@ export class SettingsStore {
       const errMsg = e instanceof Error ? e.message : String(e);
       console.error(`[SettingsStore] Failed to load settings: ${errMsg}`);
       return null;
+    }
+  }
+
+  async getSettingsWithStatus(): Promise<SettingsLoadResult> {
+    if (!await this.ensureInitialized()) {
+      return {
+        settings: null,
+        error: this.lastInitError ?? StorageError.notInitialized()
+      };
+    }
+    if (this.prefs === null) {
+      return {
+        settings: null,
+        error: new StorageError(
+          StorageErrorType.INITIALIZATION_FAILED,
+          'Preferences is null after initialization'
+        )
+      };
+    }
+    try {
+      const json = await this.prefs.get(SettingsStore.SETTINGS_JSON_KEY, '');
+      if (json.length === 0) {
+        return { settings: null };
+      }
+      const settings = AppSettings.fromJSON(json);
+      return { settings: settings };
+    } catch (e) {
+      const originalError = e instanceof Error ? e : new Error(String(e));
+      return {
+        settings: null,
+        error: StorageError.parseFailed(SettingsStore.SETTINGS_JSON_KEY, originalError)
+      };
     }
   }
 

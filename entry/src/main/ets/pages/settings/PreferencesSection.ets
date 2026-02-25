@@ -9,6 +9,7 @@ import { ContextStyle, DifficultyLevel } from '../../context/TemplateManager';
 import { ThemeManager } from '../../manager/ThemeManager';
 import { DBManager } from '../../database/DBManager';
 import { ColorsInterface } from '../../model/TokenInterfaces';
+import { OptionButton } from './OptionButton';
 
 const STUDY_FLOW_OPTIONS: SelectOption[] = [
   { value: '合并（复习优先）' },
@@ -104,19 +105,6 @@ export struct PreferencesSection {
     return rounded;
   }
 
-  // Compact option button
-  @Builder
-  buildOptionButton(label: string, isSelected: boolean, onClick: () => void) {
-    Text(label)
-      .fontSize(DesignTokens.Typography.FONT_SIZE_SM)
-      .fontColor(isSelected ? this.colors.WHITE : this.colors.TEXT_PRIMARY)
-      .fontWeight(isSelected ? DesignTokens.Typography.FONT_WEIGHT_MEDIUM : DesignTokens.Typography.FONT_WEIGHT_REGULAR)
-      .padding({ left: 12, right: 12, top: 6, bottom: 6 })
-      .backgroundColor(isSelected ? this.colors.PRIMARY : this.colors.GRAY_100)
-      .borderRadius(DesignTokens.BorderRadius.MD)
-      .onClick(onClick)
-  }
-
   // Number input with unit
   @Builder
   buildNumberInput(value: number, placeholder: string, unit: string, onChange: (val: number) => void, min: number, max: number) {
@@ -160,14 +148,14 @@ export struct PreferencesSection {
               .fontColor(this.colors.TEXT_PRIMARY)
             Blank()
             Row({ space: DesignTokens.Spacing.SM }) {
-              this.buildOptionButton('浅色', this.themeId === 'light', () => {
+              OptionButton({ label: '浅色', isSelected: this.themeId === 'light', onButtonClick: () => {
                 this.themeId = 'light';
                 ThemeManager.getInstance().setTheme('light');
-              })
-              this.buildOptionButton('深色', this.themeId === 'dark', () => {
+              }})
+              OptionButton({ label: '深色', isSelected: this.themeId === 'dark', onButtonClick: () => {
                 this.themeId = 'dark';
                 ThemeManager.getInstance().setTheme('dark');
-              })
+              }})
             }
           }
           .width('100%')
@@ -375,15 +363,15 @@ export struct PreferencesSection {
                 .fontColor(this.colors.TEXT_PRIMARY)
               Blank()
               Row({ space: DesignTokens.Spacing.SM }) {
-                this.buildOptionButton('自动', this.pronunciationMode === 'auto', () => {
+                OptionButton({ label: '自动', isSelected: this.pronunciationMode === 'auto', onButtonClick: () => {
                   this.pronunciationMode = 'auto';
-                })
-                this.buildOptionButton('在线', this.pronunciationMode === 'online', () => {
+                }})
+                OptionButton({ label: '在线', isSelected: this.pronunciationMode === 'online', onButtonClick: () => {
                   this.pronunciationMode = 'online';
-                })
-                this.buildOptionButton('系统', this.pronunciationMode === 'system', () => {
+                }})
+                OptionButton({ label: '系统', isSelected: this.pronunciationMode === 'system', onButtonClick: () => {
                   this.pronunciationMode = 'system';
-                })
+                }})
               }
             }
             .width('100%')
@@ -415,27 +403,27 @@ export struct PreferencesSection {
             .margin({ bottom: DesignTokens.Spacing.SM })
 
           Flex({ direction: FlexDirection.Row, wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
-            this.buildOptionButton('随机', this.selectedContextStyle === ContextStyle.RANDOM, () => {
+            OptionButton({ label: '随机', isSelected: this.selectedContextStyle === ContextStyle.RANDOM, onButtonClick: () => {
               this.selectedContextStyle = ContextStyle.RANDOM;
-            })
-            this.buildOptionButton('对话', this.selectedContextStyle === ContextStyle.CONVERSATIONAL, () => {
+            }})
+            OptionButton({ label: '对话', isSelected: this.selectedContextStyle === ContextStyle.CONVERSATIONAL, onButtonClick: () => {
               this.selectedContextStyle = ContextStyle.CONVERSATIONAL;
-            })
-            this.buildOptionButton('正式', this.selectedContextStyle === ContextStyle.FORMAL, () => {
+            }})
+            OptionButton({ label: '正式', isSelected: this.selectedContextStyle === ContextStyle.FORMAL, onButtonClick: () => {
               this.selectedContextStyle = ContextStyle.FORMAL;
-            })
-            this.buildOptionButton('幽默', this.selectedContextStyle === ContextStyle.HUMOROUS, () => {
+            }})
+            OptionButton({ label: '幽默', isSelected: this.selectedContextStyle === ContextStyle.HUMOROUS, onButtonClick: () => {
               this.selectedContextStyle = ContextStyle.HUMOROUS;
-            })
-            this.buildOptionButton('叙述', this.selectedContextStyle === ContextStyle.NARRATIVE, () => {
+            }})
+            OptionButton({ label: '叙述', isSelected: this.selectedContextStyle === ContextStyle.NARRATIVE, onButtonClick: () => {
               this.selectedContextStyle = ContextStyle.NARRATIVE;
-            })
-            this.buildOptionButton('技术', this.selectedContextStyle === ContextStyle.TECHNICAL, () => {
+            }})
+            OptionButton({ label: '技术', isSelected: this.selectedContextStyle === ContextStyle.TECHNICAL, onButtonClick: () => {
               this.selectedContextStyle = ContextStyle.TECHNICAL;
-            })
-            this.buildOptionButton('自定义', this.selectedContextStyle === ContextStyle.CUSTOM, () => {
+            }})
+            OptionButton({ label: '自定义', isSelected: this.selectedContextStyle === ContextStyle.CUSTOM, onButtonClick: () => {
               this.selectedContextStyle = ContextStyle.CUSTOM;
-            })
+            }})
           }
           .width('100%')
           .margin({ bottom: DesignTokens.Spacing.SM })
@@ -466,33 +454,33 @@ export struct PreferencesSection {
             .margin({ top: DesignTokens.Spacing.SM, bottom: DesignTokens.Spacing.SM })
 
           Flex({ direction: FlexDirection.Row, wrap: FlexWrap.Wrap, justifyContent: FlexAlign.Start }) {
-            this.buildOptionButton('入门', this.selectedDifficultyLevel === DifficultyLevel.BEGINNER, () => {
+            OptionButton({ label: '入门', isSelected: this.selectedDifficultyLevel === DifficultyLevel.BEGINNER, onButtonClick: () => {
               this.selectedDifficultyLevel = DifficultyLevel.BEGINNER;
-            })
-            this.buildOptionButton('四级', this.selectedDifficultyLevel === DifficultyLevel.CET4, () => {
+            }})
+            OptionButton({ label: '四级', isSelected: this.selectedDifficultyLevel === DifficultyLevel.CET4, onButtonClick: () => {
               this.selectedDifficultyLevel = DifficultyLevel.CET4;
-            })
-            this.buildOptionButton('六级', this.selectedDifficultyLevel === DifficultyLevel.CET6, () => {
+            }})
+            OptionButton({ label: '六级', isSelected: this.selectedDifficultyLevel === DifficultyLevel.CET6, onButtonClick: () => {
               this.selectedDifficultyLevel = DifficultyLevel.CET6;
-            })
-            this.buildOptionButton('考研', this.selectedDifficultyLevel === DifficultyLevel.POSTGRADUATE, () => {
+            }})
+            OptionButton({ label: '考研', isSelected: this.selectedDifficultyLevel === DifficultyLevel.POSTGRADUATE, onButtonClick: () => {
               this.selectedDifficultyLevel = DifficultyLevel.POSTGRADUATE;
-            })
-            this.buildOptionButton('雅思', this.selectedDifficultyLevel === DifficultyLevel.IELTS, () => {
+            }})
+            OptionButton({ label: '雅思', isSelected: this.selectedDifficultyLevel === DifficultyLevel.IELTS, onButtonClick: () => {
               this.selectedDifficultyLevel = DifficultyLevel.IELTS;
-            })
-            this.buildOptionButton('托福', this.selectedDifficultyLevel === DifficultyLevel.TOEFL, () => {
+            }})
+            OptionButton({ label: '托福', isSelected: this.selectedDifficultyLevel === DifficultyLevel.TOEFL, onButtonClick: () => {
               this.selectedDifficultyLevel = DifficultyLevel.TOEFL;
-            })
-            this.buildOptionButton('SAT', this.selectedDifficultyLevel === DifficultyLevel.SAT, () => {
+            }})
+            OptionButton({ label: 'SAT', isSelected: this.selectedDifficultyLevel === DifficultyLevel.SAT, onButtonClick: () => {
               this.selectedDifficultyLevel = DifficultyLevel.SAT;
-            })
-            this.buildOptionButton('GRE', this.selectedDifficultyLevel === DifficultyLevel.GRE, () => {
+            }})
+            OptionButton({ label: 'GRE', isSelected: this.selectedDifficultyLevel === DifficultyLevel.GRE, onButtonClick: () => {
               this.selectedDifficultyLevel = DifficultyLevel.GRE;
-            })
-            this.buildOptionButton('高级', this.selectedDifficultyLevel === DifficultyLevel.ADVANCED, () => {
+            }})
+            OptionButton({ label: '高级', isSelected: this.selectedDifficultyLevel === DifficultyLevel.ADVANCED, onButtonClick: () => {
               this.selectedDifficultyLevel = DifficultyLevel.ADVANCED;
-            })
+            }})
           }
           .width('100%')
           .margin({ bottom: DesignTokens.Spacing.SM })

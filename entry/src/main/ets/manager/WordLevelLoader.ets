@@ -39,51 +39,71 @@ export class WordLevelLoader {
     if (this.loaded || this.loading) {
       return;
     }
-    
+
     if (this.resourceMgr === null) {
       console.warn('[WordLevelLoader] ResourceManager not set, skip loading');
       return;
     }
-    
+
     this.loading = true;
     console.info('[WordLevelLoader] Starting to load word_levels.txt...');
-    
+
     const startTime = Date.now();
     let totalWords = 0;
-    
+
     try {
       const uint8Array = await this.resourceMgr.getRawFileContent('wordbooks/word_levels.txt');
       const decoder = new util.TextDecoder('utf-8');
       const content = decoder.decode(uint8Array);
       const lines = content.split(/\r?\n/);
-      
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed.length === 0 || trimmed.startsWith('#')) {
-          continue;
-        }
-        
-        const entry = this.parseLine(trimmed);
-        if (entry !== null) {
-          this.cache.set(entry.word, entry.levels);
-          
-          for (const level of entry.levels) {
-            if (!this.levelIndex.has(level)) {
-              this.levelIndex.set(level, new Set());
-            }
-            this.levelIndex.get(level)!.add(entry.word);
+
+      // Process in batches to avoid blocking main thread
+      const BATCH_SIZE = 500;
+      const YIELD_INTERVAL_MS = 16; // ~60fps
+
+      for (let i = 0; i < lines.length; i += BATCH_SIZE) {
+        const batchStartTime = Date.now();
+        const batch = lines.slice(i, i + BATCH_SIZE);
+
+        for (const line of batch) {
+          const trimmed = line.trim();
+          if (trimmed.length === 0 || trimmed.startsWith('#')) {
+            continue;
           }
-          
-          totalWords++;
+
+          const entry = this.parseLine(trimmed);
+          if (entry !== null) {
+            this.cache.set(entry.word, entry.levels);
+
+            for (const level of entry.levels) {
+              if (!this.levelIndex.has(level)) {
+                this.levelIndex.set(level, new Set());
+              }
+              this.levelIndex.get(level)!.add(entry.word);
+            }
+
+            totalWords++;
+          }
+        }
+
+        // Yield to event loop every batch or if processing took too long
+        const batchElapsed = Date.now() - batchStartTime;
+        if (batchElapsed > YIELD_INTERVAL_MS || i + BATCH_SIZE < lines.length) {
+          await this.yieldToEventLoop();
+        }
+
+        // Log progress every 5000 words
+        if (totalWords % 5000 < BATCH_SIZE && totalWords > 0) {
+          console.info(`[WordLevelLoader] Loading progress: ${totalWords} words...`);
         }
       }
-      
-      this.buildSortedCache();
-      
+
+      await this.buildSortedCacheAsync();
+
       this.loaded = true;
       const elapsed = Date.now() - startTime;
       console.info(`[WordLevelLoader] Loaded ${totalWords} words with levels in ${elapsed}ms`);
-      
+
       const levelKeys: string[] = [];
       this.levelIndex.forEach((_: Set<string>, key: string) => {
         levelKeys.push(key);
@@ -94,6 +114,42 @@ export class WordLevelLoader {
     } finally {
       this.loading = false;
     }
+  }
+
+  private async yieldToEventLoop(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      setTimeout(() => resolve(), 0);
+    });
+  }
+
+  private async buildSortedCacheAsync(): Promise<void> {
+    const sortStart = Date.now();
+    const levels = Array.from(this.levelIndex.entries());
+
+    // Process sorting in batches to avoid blocking
+    const BATCH_SIZE = 100;
+    for (let i = 0; i < levels.length; i += BATCH_SIZE) {
+      const batch = levels.slice(i, i + BATCH_SIZE);
+
+      for (const entry of batch) {
+        const level: string = entry[0];
+        const words: Set<string> = entry[1];
+        const arr: string[] = [];
+        words.forEach((w: string) => {
+          arr.push(w);
+        });
+        arr.sort();
+        this.sortedLevelCache.set(level, arr);
+      }
+
+      // Yield after each batch
+      if (i + BATCH_SIZE < levels.length) {
+        await this.yieldToEventLoop();
+      }
+    }
+
+    const sortElapsed = Date.now() - sortStart;
+    console.info(`[WordLevelLoader] Built sorted cache in ${sortElapsed}ms`);
   }
   
   private parseLine(line: string): WordLevelEntry | null {

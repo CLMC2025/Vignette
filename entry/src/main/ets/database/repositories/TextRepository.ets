@@ -107,5 +107,46 @@ export class TextRepository extends BaseRepository {
     resultSet.close();
     return out;
   }
+
+  async syncTexts(texts: TextRow[]): Promise<void> {
+    this.ensureInitialized();
+    if (texts.length === 0) {
+      return;
+    }
+
+    this.store!.beginTransaction();
+    try {
+      for (const text of texts) {
+        const bucket: relationalStore.ValuesBucket = {
+          'title': text.title,
+          'content': text.content,
+          'source_type': text.sourceType,
+          'source_ref': text.sourceRef,
+          'created_at': text.createdAt,
+          'updated_at': text.updatedAt
+        };
+
+        try {
+          await this.store!.insert(TABLE_TEXTS, bucket);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (msg.includes('UNIQUE constraint failed')) {
+            continue;
+          }
+          throw new Error(String(e));
+        }
+      }
+      this.store!.commit();
+    } catch (e) {
+      this.store!.rollBack();
+      throw new Error(String(e));
+    }
+  }
+
+  async clearAllTexts(): Promise<void> {
+    this.ensureInitialized();
+    const predicates = new relationalStore.RdbPredicates(TABLE_TEXTS);
+    await this.store!.delete(predicates);
+  }
 }
 

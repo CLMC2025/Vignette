@@ -1,7 +1,9 @@
 import promptAction from '@ohos.promptAction';
+import type common from '@ohos.app.ability.common';
 import { DesignTokens } from '../../model/DesignTokens';
 import { ColorsInterface } from '../../model/TokenInterfaces';
 import { ThemeManager } from '../../manager/ThemeManager';
+import { openUrl } from '../../utils/UrlOpener';
 
 @Component
 export struct SettingsAboutSection {
@@ -140,7 +142,7 @@ export struct SettingsAboutSection {
   }
 
   @Builder
-  private buildContactRow(label: string, value: string) {
+  private buildContactRow(label: string, value: string, url?: string) {
     Row() {
       Text(label)
         .fontSize(DesignTokens.Typography.FONT_SIZE_SM)
@@ -149,12 +151,18 @@ export struct SettingsAboutSection {
 
       Text(value)
         .fontSize(DesignTokens.Typography.FONT_SIZE_BASE)
-        .fontColor(this.colors.TEXT_PRIMARY)
+        .fontColor(url ? this.colors.PRIMARY : this.colors.TEXT_PRIMARY)
         .layoutWeight(1)
     }
     .width('100%')
     .height(56)
     .padding({ left: DesignTokens.Spacing.LG, right: DesignTokens.Spacing.LG })
+    .onClick(() => {
+      if (url) {
+        const context = getContext(this) as common.UIAbilityContext;
+        openUrl(context, url);
+      }
+    })
   }
 
   @Builder
@@ -167,15 +175,34 @@ export struct SettingsAboutSection {
         .width('100%')
         .margin({ bottom: DesignTokens.Spacing.MD })
 
-      this.buildContactRow('项目地址', 'github.com/CLMC2025/Vignette')
+      this.buildContactRow('项目地址', 'github.com/CLMC2025/Vignette', 'https://github.com/CLMC2025/Vignette')
 
       Divider().color(this.colors.GRAY_200).margin({ left: DesignTokens.Spacing.LG, right: DesignTokens.Spacing.LG })
 
-      this.buildContactRow('反馈邮箱', 'c_k1@foxmail.com')
+      this.buildContactRow('反馈邮箱', '5@941985.xyz', 'mailto:5@941985.xyz')
 
       Divider().color(this.colors.GRAY_200).margin({ left: DesignTokens.Spacing.LG, right: DesignTokens.Spacing.LG })
 
-      this.buildContactRow('QQ群', '1077476965')
+      this.buildContactRow('QQ群', '1077476965', 'mqqapi://card/show_pslcard?src_type=internal&version=1&uin=1077476965&card_type=group&source=qrcode')
+    }
+    .width('100%')
+    .padding({ top: DesignTokens.Spacing.LG, bottom: DesignTokens.Spacing.LG })
+    .backgroundColor(this.colors.SURFACE_PRIMARY)
+    .borderRadius(DesignTokens.BorderRadius.LG)
+    .margin({ top: DesignTokens.Spacing.MD })
+  }
+
+  @Builder
+  private buildSupportCard() {
+    Column() {
+      Text('支持作者')
+        .fontSize(DesignTokens.Typography.FONT_SIZE_BASE)
+        .fontWeight(DesignTokens.Typography.FONT_WEIGHT_MEDIUM)
+        .fontColor(this.colors.TEXT_PRIMARY)
+        .width('100%')
+        .margin({ bottom: DesignTokens.Spacing.MD })
+
+      this.buildContactRow('爱发电', 'afdian.com/a/weiyudanci', 'https://afdian.com/a/weiyudanci')
     }
     .width('100%')
     .padding({ top: DesignTokens.Spacing.LG, bottom: DesignTokens.Spacing.LG })
@@ -195,6 +222,7 @@ export struct SettingsAboutSection {
 
       this.buildAppInfoCard()
       this.buildContactCard()
+      this.buildSupportCard()
     }
     .width('100%')
   }

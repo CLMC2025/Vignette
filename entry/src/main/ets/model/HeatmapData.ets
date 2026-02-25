@@ -7,4 +7,5 @@ export interface HeatmapDailyStats {
   reviewCount: number;
   durationMs: number;
   totalReviews: number;
+  wordCount: number;
 }

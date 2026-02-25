@@ -16,8 +16,12 @@ export class ReadPageAudioManager {
   private dictionaryManager: DictionaryManager;
   private systemTtsManager: SystemTtsManager;
   private ttsAudioFetcher: TtsAudioFetcher;
-  
+
   private onPlayingStateChange: (isPlaying: boolean) => void;
+
+  // Event handler references for cleanup
+  private stateChangeHandler: ((state: string, reason: media.StateChangeReason) => void) | null = null;
+  private errorHandler: ((err: Error) => void) | null = null;
 
   constructor(
     dictionaryManager: DictionaryManager,
@@ -37,9 +41,33 @@ export class ReadPageAudioManager {
 
   public async release(): Promise<void> {
     await this.stopCurrentAudio();
+    // Remove event listeners before releasing
+    this.removeEventListeners();
     if (this.avPlayer) {
       await this.avPlayer.release();
       this.avPlayer = null;
+    }
+  }
+
+  private removeEventListeners(): void {
+    if (this.avPlayer === null) {
+      return;
+    }
+    try {
+      if (this.stateChangeHandler) {
+        this.avPlayer.off('stateChange', this.stateChangeHandler);
+        this.stateChangeHandler = null;
+      }
+    } catch (e) {
+      console.warn('[ReadPageAudioManager] Failed to remove stateChange listener:', e);
+    }
+    try {
+      if (this.errorHandler) {
+        this.avPlayer.off('error', this.errorHandler);
+        this.errorHandler = null;
+      }
+    } catch (e) {
+      console.warn('[ReadPageAudioManager] Failed to remove error listener:', e);
     }
   }
 
@@ -289,12 +317,15 @@ export class ReadPageAudioManager {
 
   private async initAudioPlayer(): Promise<void> {
     if (this.avPlayer !== null) {
+      // Remove old listeners before releasing
+      this.removeEventListeners();
       await this.avPlayer.release();
     }
     this.avPlayer = await media.createAVPlayer();
     this.avPlayerState = 'idle';
-    
-    this.avPlayer.on('stateChange', (state: string, reason: media.StateChangeReason) => {
+
+    // Store handler references for cleanup
+    this.stateChangeHandler = (state: string, reason: media.StateChangeReason) => {
       console.log(`[ReadPageAudioManager] AVPlayer state change: ${this.avPlayerState} -> ${state}`);
       this.avPlayerState = state;
       switch (state) {
@@ -315,13 +346,16 @@ export class ReadPageAudioManager {
           this.onPlayingStateChange(false);
           break;
       }
-    });
+    };
 
-    this.avPlayer.on('error', (err: Error) => {
+    this.errorHandler = (err: Error) => {
       console.error('[ReadPageAudioManager] AVPlayer error:', err);
       this.avPlayerLastError = err.message;
       this.onPlayingStateChange(false);
-    });
+    };
+
+    this.avPlayer.on('stateChange', this.stateChangeHandler);
+    this.avPlayer.on('error', this.errorHandler);
   }
 
   private async tryPlayRemoteUrlDirect(url: string, token: number): Promise<boolean> {

@@ -16,6 +16,7 @@ import { LearningHeatmap } from '../../components/LearningHeatmap';
 import { DayDetailDialog } from '../../components/DayDetailDialog';
 import { ColorsInterface } from '../../model/TokenInterfaces';
 import { ThemeManager } from '../../manager/ThemeManager';
+import { DateUtils } from '../../utils/DateUtils';
 
 interface HeatmapRange {
   startMs: number;
@@ -50,7 +51,8 @@ export struct HomeTabContent {
     newCount: 0,
     reviewCount: 0,
     durationMs: 0,
-    totalReviews: 0
+    totalReviews: 0,
+    wordCount: 0
   };
   @State todayDoneCount: number = 0;
   @State newWordsToday: number = 0;
@@ -62,13 +64,16 @@ export struct HomeTabContent {
   @StorageProp('ThemeRefreshToken') @Watch('onThemeChange') themeRefreshToken: number = 0;
   @State private colors: ColorsInterface = ThemeManager.getInstance().getColors();
   @State searchQuery: string = '';
+  @State searchSuggestions: WordItem[] = [];
+  @State showSearchSuggestions: boolean = false;
+  @State searchLoading: boolean = false;
 
   private onThemeChange(): void {
     this.colors = ThemeManager.getInstance().getColors();
   }
-  @State searchLoading: boolean = false;
 
   private dbManager: DBManager = DBManager.getInstance();
+  private searchDebounceTimer: number = -1;
   private context: common.UIAbilityContext | null = null;
   private readonly STORAGE_KEY_CURRENT_BOOK: string = 'current_book_id';
   private readonly STORAGE_KEY_STREAK_DAYS: string = 'learning_streak_days';
@@ -120,14 +125,18 @@ export struct HomeTabContent {
   }
 
   private getStartOfDayMs(ts: number): number {
-    const d = new Date(ts);
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0).getTime();
+    const result = DateUtils.getStartOfDayMs(ts);
+    console.info(`[HomeTabContent] getStartOfDayMs: input=${ts}, result=${result}, formatted=${DateUtils.formatDebugDate(result)}`);
+    return result;
   }
 
   private getHeatmapRange(): HeatmapRange {
-    const todayStart = this.getStartOfDayMs(Date.now());
+    const now = Date.now();
+    const todayStart = this.getStartOfDayMs(now);
     const endMs = todayStart + this.DAY_MS - 1;
     const startMs = todayStart - this.HEATMAP_DAYS * this.DAY_MS;
+    console.info(`[HomeTabContent] getHeatmapRange: now=${now}, todayStart=${todayStart}, startMs=${startMs}, endMs=${endMs}`);
+    console.info(`[HomeTabContent] getHeatmapRange: todayStartDate=${new Date(todayStart).toISOString()}, startDate=${new Date(startMs).toISOString()}`);
     return { startMs, endMs };
   }
 
@@ -295,6 +304,68 @@ export struct HomeTabContent {
       promptAction.showToast({ message: errText.length > 0 ? errText : '搜索失败', duration: 2000 });
     } finally {
       this.searchLoading = false;
+    }
+  }
+
+  private async updateSearchSuggestions(query: string): Promise<void> {
+    const normalized = this.normalizeLookupWord(query);
+    if (normalized.length === 0) {
+      this.searchSuggestions = [];
+      this.showSearchSuggestions = false;
+      return;
+    }
+
+    try {
+      const results = await this.dbManager.searchWords(normalized, 9);
+
+      const exactMatch = results.find(w => w.word === normalized);
+
+      if (!exactMatch) {
+        const userInputItem = new WordItem(0, normalized);
+        userInputItem.bookId = 'user_input';
+        this.searchSuggestions = [userInputItem, ...results];
+      } else {
+        this.searchSuggestions = results;
+      }
+
+      this.showSearchSuggestions = this.searchSuggestions.length > 0;
+    } catch (e) {
+      console.error(`[HomeTabContent] Search suggestions error: ${e}`);
+      this.searchSuggestions = [];
+      this.showSearchSuggestions = false;
+    }
+  }
+
+  private onSearchInputChange(value: string): void {
+    this.searchQuery = value;
+
+    if (this.searchDebounceTimer !== -1) {
+      clearTimeout(this.searchDebounceTimer);
+    }
+
+    this.searchDebounceTimer = setTimeout(() => {
+      void this.updateSearchSuggestions(value);
+    }, 300);
+  }
+
+  private async onSuggestionClick(wordItem: WordItem): Promise<void> {
+    this.showSearchSuggestions = false;
+
+    if (wordItem.id === 0) {
+      const wordId = await this.ensureWordIdForDetailPage(wordItem.word);
+      if (wordId <= 0) {
+        promptAction.showToast({ message: '无法打开单词详情', duration: 1500 });
+        return;
+      }
+      await router.pushUrl({
+        url: 'pages/WordDetailPage',
+        params: { wordId: wordId, wordText: wordItem.word }
+      });
+    } else {
+      await router.pushUrl({
+        url: 'pages/WordDetailPage',
+        params: { wordId: wordItem.id, wordText: wordItem.word }
+      });
     }
   }
 
@@ -497,7 +568,7 @@ export struct HomeTabContent {
         return;
       }
 
-      const sessionId = SessionTransferStore.getInstance().put(validQueue);
+      const sessionId = await SessionTransferStore.getInstance().put(validQueue);
       const params: RouterParams = { sessionId: sessionId };
       router.pushUrl({ url: 'pages/ReadPage', params: params });
     } catch (e) {
@@ -519,29 +590,77 @@ export struct HomeTabContent {
     Stack() {
       Scroll() {
         Column() {
-          Row() {
-            TextInput({ text: this.searchQuery, placeholder: '搜索单词' })
-              .layoutWeight(1)
-              .height(40)
-              .fontSize(14)
-              .fontColor(this.colors.TEXT_PRIMARY)
-              .backgroundColor(this.colors.GRAY_100)
-              .borderRadius(10)
-              .padding({ left: 12, right: 12 })
-              .onChange((value: string) => {
-                this.searchQuery = value;
-              })
+          Column() {
+            Row() {
+              TextInput({ text: this.searchQuery, placeholder: '搜索单词' })
+                .layoutWeight(1)
+                .height(40)
+                .fontSize(14)
+                .fontColor(this.colors.TEXT_PRIMARY)
+                .backgroundColor(this.colors.GRAY_100)
+                .borderRadius(10)
+                .padding({ left: 12, right: 12 })
+                .onChange((value: string) => {
+                  this.onSearchInputChange(value);
+                })
 
-            Text(this.searchLoading ? '搜索中' : '搜索')
-              .fontSize(14)
-              .fontColor(this.colors.WHITE)
-              .padding({ left: 14, right: 14, top: 10, bottom: 10 })
-              .backgroundColor(this.searchLoading ? this.colors.GRAY_400 : this.colors.PRIMARY)
-              .borderRadius(10)
-              .margin({ left: 10 })
-              .onClick(() => {
-                void this.doSearchWord();
-              })
+              Text(this.searchLoading ? '搜索中' : '搜索')
+                .fontSize(14)
+                .fontColor(this.colors.WHITE)
+                .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+                .backgroundColor(this.searchLoading ? this.colors.GRAY_400 : this.colors.PRIMARY)
+                .borderRadius(10)
+                .margin({ left: 10 })
+                .onClick(() => {
+                  if (this.searchSuggestions.length > 0) {
+                    void this.onSuggestionClick(this.searchSuggestions[0]);
+                  } else {
+                    void this.doSearchWord();
+                  }
+                })
+            }
+            .width('100%')
+
+            if (this.showSearchSuggestions && this.searchSuggestions.length > 0) {
+              List() {
+                ForEach(this.searchSuggestions, (wordItem: WordItem, index: number) => {
+                  ListItem() {
+                    Row() {
+                      Text(wordItem.word)
+                        .fontSize(14)
+                        .fontColor(this.colors.TEXT_PRIMARY)
+                        .layoutWeight(1)
+
+                      if (index === 0 && wordItem.id === 0) {
+                        Text('（新单词）')
+                          .fontSize(12)
+                          .fontColor(this.colors.PRIMARY)
+                      } else if (wordItem.status === WordStatus.KNOWN) {
+                        Text('已掌握')
+                          .fontSize(12)
+                          .fontColor(this.colors.GRAY_400)
+                      } else if (wordItem.status === WordStatus.LEARNING) {
+                        Text('学习中')
+                          .fontSize(12)
+                          .fontColor(this.colors.PRIMARY)
+                      }
+                    }
+                    .width('100%')
+                    .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+                    .backgroundColor(this.colors.SURFACE_PRIMARY)
+                  }
+                  .onClick(() => {
+                    void this.onSuggestionClick(wordItem);
+                  })
+                }, (wordItem: WordItem, index: number) => `${wordItem.word}-${index}`)
+              }
+              .width('100%')
+              .height(Math.min(this.searchSuggestions.length * 44, 200))
+              .backgroundColor(this.colors.SURFACE_PRIMARY)
+              .borderRadius(8)
+              .margin({ top: 8 })
+              .divider({ strokeWidth: 0.5, color: this.colors.GRAY_200 })
+            }
           }
           .width('100%')
           .padding(12)

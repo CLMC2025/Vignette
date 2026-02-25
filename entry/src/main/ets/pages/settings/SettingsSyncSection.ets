@@ -43,6 +43,13 @@ export struct SettingsSyncSection {
   @State webdavBusy: boolean = false;
   @State restoreDialogShowing: boolean = false; // Bug fix: 防止重复弹出恢复确认对话框
 
+  // Throttling for state updates to prevent UI jank during sync
+  private pendingResultUpdate: string = '';
+  private pendingBackupResultUpdate: string = '';
+  private resultUpdateTimer: number = -1;
+  private backupResultUpdateTimer: number = -1;
+  private readonly RESULT_UPDATE_INTERVAL: number = 200; // 200ms throttle
+
   private webdavManager: WebDavSyncManager = WebDavSyncManager.getInstance();
   private webdavStateStore: WebDavStateStore = WebDavStateStore.getInstance();
   private syncManager: DataSyncManager = DataSyncManager.getInstance();
@@ -53,6 +60,65 @@ export struct SettingsSyncSection {
 
   aboutToAppear(): void {
     void this.loadAutoSyncSettings();
+  }
+
+  aboutToDisappear(): void {
+    // Clean up any pending timers
+    if (this.resultUpdateTimer !== -1) {
+      clearTimeout(this.resultUpdateTimer);
+      this.resultUpdateTimer = -1;
+    }
+    if (this.backupResultUpdateTimer !== -1) {
+      clearTimeout(this.backupResultUpdateTimer);
+      this.backupResultUpdateTimer = -1;
+    }
+  }
+
+  // Throttled update for webdavResult to prevent UI jank
+  private setWebdavResultThrottled(value: string): void {
+    this.pendingResultUpdate = value;
+
+    if (this.resultUpdateTimer !== -1) {
+      // Timer already pending, will pick up the latest value
+      return;
+    }
+
+    this.resultUpdateTimer = setTimeout(() => {
+      this.webdavResult = this.pendingResultUpdate;
+      this.resultUpdateTimer = -1;
+    }, this.RESULT_UPDATE_INTERVAL);
+  }
+
+  // Throttled update for webdavBackupResult to prevent UI jank
+  private setWebdavBackupResultThrottled(value: string): void {
+    this.pendingBackupResultUpdate = value;
+
+    if (this.backupResultUpdateTimer !== -1) {
+      // Timer already pending, will pick up the latest value
+      return;
+    }
+
+    this.backupResultUpdateTimer = setTimeout(() => {
+      this.webdavBackupResult = this.pendingBackupResultUpdate;
+      this.backupResultUpdateTimer = -1;
+    }, this.RESULT_UPDATE_INTERVAL);
+  }
+
+  // Immediate update for final results (success/error states)
+  private setWebdavResultImmediate(value: string): void {
+    if (this.resultUpdateTimer !== -1) {
+      clearTimeout(this.resultUpdateTimer);
+      this.resultUpdateTimer = -1;
+    }
+    this.webdavResult = value;
+  }
+
+  private setWebdavBackupResultImmediate(value: string): void {
+    if (this.backupResultUpdateTimer !== -1) {
+      clearTimeout(this.backupResultUpdateTimer);
+      this.backupResultUpdateTimer = -1;
+    }
+    this.webdavBackupResult = value;
   }
 
   private async loadAutoSyncSettings(): Promise<void> {
@@ -127,35 +193,64 @@ export struct SettingsSyncSection {
     this.webdavBusy = true;
     try {
       const res = await this.runWithTimeout(fn, this.OPERATION_TIMEOUT);
-      this.webdavResult = res.success ? `✅ ${res.message}` : `⚠️ ${res.message}：${res.detail}`;
-      promptAction.showToast({ message: res.message, duration: 1200 });
+      // Delay state updates to prevent UI jank after sync completes
+      await this.yieldToEventLoop();
+      // Use immediate update for final results
+      this.setWebdavResultImmediate(res.success ? `✅ ${res.message}` : `⚠️ ${res.message}：${res.detail}`);
+      // Delay toast to avoid blocking UI
+      setTimeout(() => {
+        promptAction.showToast({ message: res.message, duration: 1200 });
+      }, 50);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      this.webdavResult = `⚠️ WebDAV 操作异常：${msg}`;
-      promptAction.showToast({ message: 'WebDAV 操作异常', duration: 1200 });
+      this.setWebdavResultImmediate(`⚠️ WebDAV 操作异常：${msg}`);
+      setTimeout(() => {
+        promptAction.showToast({ message: 'WebDAV 操作异常', duration: 1200 });
+      }, 50);
     } finally {
-      this.webdavBusy = false;
+      // Delay busy state reset to allow UI to render
+      setTimeout(() => {
+        this.webdavBusy = false;
+      }, 100);
     }
   }
 
   private async runWebDavBackupAction(fn: () => Promise<WebDavSyncResult>, loadingMessage: string = '正在处理...'): Promise<void> {
     if (this.webdavBusy) return;
     this.webdavBusy = true;
-    this.webdavBackupResult = loadingMessage;
+    // Use immediate update for loading state
+    this.setWebdavBackupResultImmediate(loadingMessage);
 
     await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
     try {
       const res = await this.runWithTimeout(fn, this.OPERATION_TIMEOUT);
-      this.webdavBackupResult = res.success ? `✅ ${res.message}` : `⚠️ ${res.message}：${res.detail}`;
-      promptAction.showToast({ message: res.message, duration: 1200 });
+      // Delay state updates to prevent UI jank after sync completes
+      await this.yieldToEventLoop();
+      // Use immediate update for final results
+      this.setWebdavBackupResultImmediate(res.success ? `✅ ${res.message}` : `⚠️ ${res.message}：${res.detail}`);
+      // Delay toast to avoid blocking UI
+      setTimeout(() => {
+        promptAction.showToast({ message: res.message, duration: 1200 });
+      }, 50);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      this.webdavBackupResult = `⚠️ WebDAV 操作异常：${msg}`;
-      promptAction.showToast({ message: 'WebDAV 操作异常', duration: 1200 });
+      this.setWebdavBackupResultImmediate(`⚠️ WebDAV 操作异常：${msg}`);
+      setTimeout(() => {
+        promptAction.showToast({ message: 'WebDAV 操作异常', duration: 1200 });
+      }, 50);
     } finally {
-      this.webdavBusy = false;
+      // Delay busy state reset to allow UI to render
+      setTimeout(() => {
+        this.webdavBusy = false;
+      }, 100);
     }
+  }
+
+  private async yieldToEventLoop(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      setTimeout(() => resolve(), 0);
+    });
   }
 
   private async webdavBackup(): Promise<void> {
@@ -205,17 +300,17 @@ export struct SettingsSyncSection {
     try {
       // Step 1: Download backup from cloud
       download = await this.runWithTimeout(() => this.webdavManager.downloadBackupPlain(false), this.OPERATION_TIMEOUT);
-      
+
       if (!download.result.success) {
-        this.webdavBackupResult = `⚠️ ${download.result.message}：${download.result.detail}`;
+        this.setWebdavBackupResultImmediate(`⚠️ ${download.result.message}：${download.result.detail}`);
         promptAction.showToast({ message: download.result.message, duration: 1200 });
         this.webdavBusy = false;
         this.restoreDialogShowing = false;
         return;
       }
-      
+
       if (download.plain.length === 0) {
-        this.webdavBackupResult = '⚠️ 云端无备份：未找到可用的备份文件';
+        this.setWebdavBackupResultImmediate('⚠️ 云端无备份：未找到可用的备份文件');
         promptAction.showToast({ message: '云端无备份', duration: 1200 });
         this.webdavBusy = false;
         this.restoreDialogShowing = false;
@@ -223,12 +318,12 @@ export struct SettingsSyncSection {
       }
 
       // Step 2: Parse and preview backup data
-      this.webdavBackupResult = '正在解析备份数据...';
+      this.setWebdavBackupResultImmediate('正在解析备份数据...');
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      
+
       const preview = await this.syncManager.previewImport(download.plain);
       if (preview.errors.length > 0) {
-        this.webdavBackupResult = `⚠️ 预览失败：${preview.errors.join('; ')}`;
+        this.setWebdavBackupResultImmediate(`⚠️ 预览失败：${preview.errors.join('; ')}`);
         promptAction.showToast({ message: '预览失败', duration: 1200 });
         this.webdavBusy = false;
         this.restoreDialogShowing = false;
@@ -237,7 +332,7 @@ export struct SettingsSyncSection {
 
       // Release busy state while waiting for user confirmation
       this.webdavBusy = false;
-      this.webdavBackupResult = ''; // Clear loading message before showing dialog
+      this.setWebdavBackupResultImmediate(''); // Clear loading message before showing dialog
 
       // Step 3: Show second confirmation dialog with preview data
       const sample = preview.sampleUpdatedWords.length > 0 ? `\n示例：${preview.sampleUpdatedWords.join('、')}` : '';
@@ -261,7 +356,7 @@ export struct SettingsSyncSection {
       }
 
       if (!userConfirmed) {
-        this.webdavBackupResult = '✅ 已取消恢复';
+        this.setWebdavBackupResultImmediate('✅ 已取消恢复');
         promptAction.showToast({ message: '已取消恢复', duration: 1200 });
         this.restoreDialogShowing = false;
         return;
@@ -269,16 +364,16 @@ export struct SettingsSyncSection {
 
       // Step 4: User confirmed, proceed with restore
       this.webdavBusy = true;
-      this.webdavBackupResult = '正在恢复数据...';
+      this.setWebdavBackupResultImmediate('正在恢复数据...');
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
       const importResult = await this.runWithTimeout(() => this.webdavManager.importPlainBackup(download!.plain), this.OPERATION_TIMEOUT);
-      this.webdavBackupResult = importResult.success ? `✅ ${importResult.message}` : `⚠️ ${importResult.message}：${importResult.detail}`;
+      this.setWebdavBackupResultImmediate(importResult.success ? `✅ ${importResult.message}` : `⚠️ ${importResult.message}：${importResult.detail}`);
       promptAction.showToast({ message: importResult.message, duration: 1200 });
 
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      this.webdavBackupResult = `⚠️ WebDAV 操作异常：${msg}`;
+      this.setWebdavBackupResultImmediate(`⚠️ WebDAV 操作异常：${msg}`);
       promptAction.showToast({ message: 'WebDAV 操作异常', duration: 1200 });
     } finally {
       this.webdavBusy = false;
@@ -289,34 +384,34 @@ export struct SettingsSyncSection {
   private async webdavSyncNow(): Promise<void> {
     if (this.webdavBusy) return;
     this.webdavBusy = true;
-    this.webdavResult = '正在保存设置...';
+    this.setWebdavResultImmediate('正在保存设置...');
 
     await new Promise<void>((resolve) => setTimeout(resolve, 100));
 
     try {
       const saved = await this.saveWebDavSettings();
       if (!saved) {
-        this.webdavResult = '⚠️ 保存设置失败，请先保存 WebDAV 设置';
+        this.setWebdavResultImmediate('⚠️ 保存设置失败，请先保存 WebDAV 设置');
         promptAction.showToast({ message: '保存设置失败', duration: 1200 });
         return;
       }
 
       await new Promise<void>((resolve) => setTimeout(resolve, 50));
 
-      this.webdavResult = '正在增量同步...';
+      this.setWebdavResultImmediate('正在增量同步...');
       const res = await this.runWithTimeout(() => this.webdavManager.syncIncremental(), this.OPERATION_TIMEOUT);
 
       if (res.success) {
-        this.webdavResult = `✅ ${res.message}`;
+        this.setWebdavResultImmediate(`✅ ${res.message}`);
         this.webdavAutoSyncLastError = '';
         await this.webdavStateStore.setAutoSyncLastError('');
       } else {
-        this.webdavResult = `⚠️ ${res.message}：${res.detail}`;
+        this.setWebdavResultImmediate(`⚠️ ${res.message}：${res.detail}`);
       }
       promptAction.showToast({ message: res.message, duration: 1200 });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      this.webdavResult = `⚠️ WebDAV 操作异常：${msg}`;
+      this.setWebdavResultImmediate(`⚠️ WebDAV 操作异常：${msg}`);
       promptAction.showToast({ message: 'WebDAV 操作异常', duration: 1200 });
     } finally {
       this.webdavBusy = false;
@@ -557,32 +652,38 @@ export struct SettingsSyncSection {
         .width('100%')
         .margin({ bottom: DesignTokens.Spacing.MD })
 
-      // 加载指示器区域
-      if (this.webdavBusy) {
-        Row() {
-          LoadingProgress()
-            .width(24)
-            .height(24)
-            .color(this.colors.PRIMARY)
-          
-          Text(this.currentLoadingMessage())
-            .fontSize(DesignTokens.Typography.FONT_SIZE_BASE)
-            .fontColor(this.colors.PRIMARY)
-            .fontWeight(DesignTokens.Typography.FONT_WEIGHT_MEDIUM)
-            .margin({ left: DesignTokens.Spacing.SM })
-        }
-        .width('100%')
-        .justifyContent(FlexAlign.Center)
-        .padding({ 
-          left: DesignTokens.Spacing.LG, 
-          right: DesignTokens.Spacing.LG,
-          top: DesignTokens.Spacing.SM,
-          bottom: DesignTokens.Spacing.SM
-        })
-        .backgroundColor(this.colors.PRIMARY_LIGHTEST)
-        .borderRadius(DesignTokens.BorderRadius.MD)
-        .margin({ left: DesignTokens.Spacing.LG, right: DesignTokens.Spacing.LG, bottom: DesignTokens.Spacing.MD })
+      // 加载指示器区域 - 使用 visibility 替代 if/else 避免组件创建/销毁开销
+      Row() {
+        LoadingProgress()
+          .width(24)
+          .height(24)
+          .color(this.colors.PRIMARY)
+          .visibility(this.webdavBusy ? Visibility.Visible : Visibility.Hidden)
+
+        Text(this.currentLoadingMessage())
+          .fontSize(DesignTokens.Typography.FONT_SIZE_BASE)
+          .fontColor(this.colors.PRIMARY)
+          .fontWeight(DesignTokens.Typography.FONT_WEIGHT_MEDIUM)
+          .margin({ left: DesignTokens.Spacing.SM })
+          .visibility(this.webdavBusy ? Visibility.Visible : Visibility.Hidden)
       }
+      .width('100%')
+      .justifyContent(FlexAlign.Center)
+      .padding({
+        left: DesignTokens.Spacing.LG,
+        right: DesignTokens.Spacing.LG,
+        top: this.webdavBusy ? DesignTokens.Spacing.SM : 0,
+        bottom: this.webdavBusy ? DesignTokens.Spacing.SM : 0
+      })
+      .backgroundColor(this.colors.PRIMARY_LIGHTEST)
+      .borderRadius(DesignTokens.BorderRadius.MD)
+      .margin({
+        left: DesignTokens.Spacing.LG,
+        right: DesignTokens.Spacing.LG,
+        bottom: this.webdavBusy ? DesignTokens.Spacing.MD : 0
+      })
+      .height(this.webdavBusy ? 'auto' : 0)
+      .visibility(this.webdavBusy ? Visibility.Visible : Visibility.Hidden)
 
       Row() {
         Button(this.webdavBusy ? '处理中...' : '保存设置')

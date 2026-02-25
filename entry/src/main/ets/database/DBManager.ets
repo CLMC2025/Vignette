@@ -16,6 +16,7 @@ import { BookProgress } from '../model/WordBookCatalog';
 import { HeatmapDailyStats } from '../model/HeatmapData';
 import { isUniqueConstraintErrorMessage } from '../utils/DatabaseErrorUtil';
 import { HashUtils } from '../utils/HashUtils';
+import { DateUtils } from '../utils/DateUtils';
 
 // Repositories
 import { WordRepository, DefinitionCacheRow } from './repositories/WordRepository';
@@ -214,6 +215,44 @@ export class DBManager {
     }
   }
 
+  // ==================== TRANSACTION OPERATIONS ====================
+
+  beginTransaction(): void {
+    this.ensureInitialized();
+    this.store!.beginTransaction();
+    console.info('[DBManager] Transaction BEGIN');
+  }
+
+  commit(): void {
+    this.ensureInitialized();
+    this.store!.commit();
+    console.info('[DBManager] Transaction COMMIT');
+  }
+
+  rollBack(): void {
+    this.ensureInitialized();
+    this.store!.rollBack();
+    console.info('[DBManager] Transaction ROLLBACK');
+  }
+
+  async runInTransaction<T>(operation: () => Promise<T>): Promise<T> {
+    this.ensureInitialized();
+    this.store!.beginTransaction();
+    console.info('[DBManager] runInTransaction BEGIN');
+    
+    try {
+      const result = await operation();
+      this.store!.commit();
+      console.info('[DBManager] runInTransaction COMMIT');
+      return result;
+    } catch (e) {
+      this.store!.rollBack();
+      const errMsg = e instanceof Error ? e.message : String(e);
+      console.error(`[DBManager] runInTransaction ROLLBACK: ${errMsg}`);
+      throw new DBError(`Transaction failed: ${errMsg}`);
+    }
+  }
+
   // ==================== TEXT OPERATIONS ====================
 
   async createText(
@@ -247,6 +286,14 @@ export class DBManager {
     return this.textRepo.listTexts(limit);
   }
 
+  async clearAllTexts(): Promise<void> {
+    return this.textRepo.clearAllTexts();
+  }
+
+  async syncTexts(texts: TextRow[]): Promise<void> {
+    return this.textRepo.syncTexts(texts);
+  }
+
   // ==================== WORD OPERATIONS ====================
 
   async insertWord(word: WordItem): Promise<number> {
@@ -271,6 +318,10 @@ export class DBManager {
 
   async getWordByWord(wordStr: string): Promise<WordItem | null> {
     return this.wordRepo.getWordByWord(wordStr);
+  }
+
+  async searchWords(query: string, limit: number = 10): Promise<WordItem[]> {
+    return this.wordRepo.searchWords(query, limit);
   }
 
   async getAllWords(): Promise<WordItem[]> {
@@ -439,7 +490,10 @@ export class DBManager {
   }
 
   async getHeatmapDailyStats(startMs: number, endMs: number): Promise<HeatmapDailyStats[]> {
-    const timezoneOffsetMs = -new Date().getTimezoneOffset() * 60 * 1000;
+    const timezoneOffsetMs = DateUtils.getTimezoneOffsetMs();
+    console.info(`[DBManager] getHeatmapDailyStats: startMs=${startMs}, endMs=${endMs}, timezoneOffsetMs=${timezoneOffsetMs}`);
+    console.info(`[DBManager] getHeatmapDailyStats: startDate=${DateUtils.formatDebugDate(startMs)}, endDate=${DateUtils.formatDebugDate(endMs)}`);
+    
     const aggregates: ReviewDailyAggregateRow[] = await this.reviewEventRepo.getReviewDailyAggregates(
       startMs,
       endMs,
@@ -454,24 +508,27 @@ export class DBManager {
     for (const row of newRows) {
       newMap.set(row.dayKey, row.newCount);
     }
-    const dayMs = 24 * 60 * 60 * 1000;
     const stats: HeatmapDailyStats[] = [];
     for (const row of aggregates) {
       const newCount = newMap.get(row.dayKey) ?? 0;
       const reviewCount = Math.max(0, row.wordCount - newCount);
       const totalReviews = row.againCount + row.hardCount + row.goodCount + row.easyCount;
       const durationMs = row.lastTs >= row.firstTs ? row.lastTs - row.firstTs : 0;
+      const correctedDateMs = DateUtils.dayKeyToMs(row.dayKey);
+      console.info(`[DBManager] getHeatmapDailyStats: dayKey=${row.dayKey}, correctedDateMs=${correctedDateMs}, formatted=${DateUtils.formatDebugDate(correctedDateMs)}, wordCount=${row.wordCount}, knownWordCount=${row.knownWordCount}, fuzzyWordCount=${row.fuzzyWordCount}, forgottenWordCount=${row.forgottenWordCount}`);
       stats.push({
-        dateMs: row.dayKey * dayMs - timezoneOffsetMs,
-        knownCount: row.goodCount + row.easyCount,
-        fuzzyCount: row.hardCount,
-        forgottenCount: row.againCount,
+        dateMs: correctedDateMs,
+        knownCount: row.knownWordCount,
+        fuzzyCount: row.fuzzyWordCount,
+        forgottenCount: row.forgottenWordCount,
         newCount: newCount,
         reviewCount: reviewCount,
         durationMs: durationMs,
-        totalReviews: totalReviews
+        totalReviews: totalReviews,
+        wordCount: row.wordCount
       });
     }
+    console.info(`[DBManager] getHeatmapDailyStats: returning ${stats.length} days`);
     return stats;
   }
 
@@ -561,6 +618,48 @@ export class DBManager {
     }
     const predicates = new relationalStore.RdbPredicates(TABLE_USER_NOTEBOOK_WORDS);
     predicates.equalTo('word', normalized);
+    await this.store!.delete(predicates);
+  }
+
+  async syncNotebookWords(entries: NotebookWordEntry[]): Promise<void> {
+    this.ensureInitialized();
+    if (entries.length === 0) {
+      return;
+    }
+
+    this.store!.beginTransaction();
+    try {
+      for (const entry of entries) {
+        const normalized = entry.word.trim().toLowerCase();
+        if (normalized.length === 0) {
+          continue;
+        }
+
+        const bucket: relationalStore.ValuesBucket = {
+          'word': normalized,
+          'created_at': entry.createdAt
+        };
+
+        try {
+          await this.store!.insert(TABLE_USER_NOTEBOOK_WORDS, bucket);
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (msg.includes('UNIQUE constraint failed')) {
+            continue;
+          }
+          throw new Error(String(e));
+        }
+      }
+      this.store!.commit();
+    } catch (e) {
+      this.store!.rollBack();
+      throw new Error(String(e));
+    }
+  }
+
+  async clearNotebook(): Promise<void> {
+    this.ensureInitialized();
+    const predicates = new relationalStore.RdbPredicates(TABLE_USER_NOTEBOOK_WORDS);
     await this.store!.delete(predicates);
   }
 
@@ -671,6 +770,9 @@ export class DBManager {
     await this.wordBookRepo.resetBookProgress(bookId);
   }
 }
+
+// Export TextRow for WebDAV sync
+export { TextRow } from './repositories/TextRepository';
 
 /**
  * Mock data generator for testing

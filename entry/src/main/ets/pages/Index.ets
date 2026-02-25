@@ -23,6 +23,8 @@ import { ThemeManager } from '../manager/ThemeManager';
 import { ContextStyle, DifficultyLevel } from '../context/TemplateManager';
 import { GuideManager } from '../manager/GuideManager';
 import { ColorsInterface } from '../model/TokenInterfaces';
+import { TimerManager } from '../utils/TimerManager';
+import { Constants } from '../utils/Constants';
 
 @Entry
 @Component
@@ -48,8 +50,7 @@ struct Index {
 
   private storesInitialized: boolean = false;
   private privacyChecked: boolean = false;
-  private backupReminderTimer: number = -1;
-  private celebrationTimer: number = -1;
+  private timerManager: TimerManager = new TimerManager();
 
   aboutToAppear(): void {
     this.context = getContext(this) as common.UIAbilityContext;
@@ -58,21 +59,14 @@ struct Index {
     SecureStorage.getInstance().injectContext(this.context);
     ContextDefinitionStore.getInstance().injectContext(this.context);
     SettingsStore.getInstance().injectContext(this.context);
-    
+
     this.loadBuiltInDictionaryInBackground();
-    
+
     void this.bootstrapApp();
   }
 
   aboutToDisappear(): void {
-    if (this.backupReminderTimer !== -1) {
-      clearTimeout(this.backupReminderTimer);
-      this.backupReminderTimer = -1;
-    }
-    if (this.celebrationTimer !== -1) {
-      clearTimeout(this.celebrationTimer);
-      this.celebrationTimer = -1;
-    }
+    this.timerManager.clearAll();
   }
 
   onPageShow(): void {
@@ -121,9 +115,9 @@ struct Index {
   }
 
   private runDeferredTasks(): void {
-    this.backupReminderTimer = setTimeout(() => {
+    this.timerManager.setTimeout(() => {
       void this.checkBackupReminder();
-    }, 500);
+    }, Constants.BACKUP_REMINDER_DELAY_MS);
   }
 
   private async maybeShowOnboarding(): Promise<void> {
@@ -243,14 +237,14 @@ struct Index {
     const raw = AppStorage.get<string>(this.STORAGE_KEY_CELEBRATE_MS);
     if (!raw) return;
     const ms = Number(raw);
-    if (!Number.isFinite(ms) || ms <= 0 || Date.now() - ms > 60 * 1000) {
+    if (!Number.isFinite(ms) || ms <= 0 || Date.now() - ms > Constants.TIME_MS_PER_MINUTE) {
       AppStorage.setOrCreate(this.STORAGE_KEY_CELEBRATE_MS, '');
       return;
     }
     AppStorage.setOrCreate(this.STORAGE_KEY_CELEBRATE_MS, '');
     this.celebrationSeed = this.celebrationSeed + 1;
     this.showCelebration = true;
-    this.celebrationTimer = setTimeout(() => { this.showCelebration = false; }, 1600);
+    this.timerManager.setTimeout(() => { this.showCelebration = false; }, 1600);
   }
 
   private async publishBackupReminderNotification(): Promise<void> {
@@ -289,9 +283,12 @@ struct Index {
       const manifest = WebDavManifest.fromJSON(AppStorage.get<string>('webdav_manifest') ?? '', deviceId);
       const lastBackupMs = manifest.lastBackupUploadMs > 0 ? manifest.lastBackupUploadMs : firstRunMs;
 
-      if (now - lastBackupMs < 3 * 24 * 3600 * 1000) return;
+      const backupThresholdMs = Constants.BACKUP_REMINDER_THRESHOLD_DAYS * Constants.TIME_MS_PER_DAY;
+      if (now - lastBackupMs < backupThresholdMs) return;
+      
+      const remindIntervalMs = Constants.BACKUP_REMINDER_INTERVAL_MS;
       const lastRemindMs = Number(AppStorage.get<string>(this.STORAGE_KEY_BACKUP_REMINDER_MS) ?? '0');
-      if (now - lastRemindMs < 24 * 3600 * 1000) return;
+      if (now - lastRemindMs < remindIntervalMs) return;
 
       AppStorage.setOrCreate(this.STORAGE_KEY_BACKUP_REMINDER_MS, String(now));
       await this.publishBackupReminderNotification();

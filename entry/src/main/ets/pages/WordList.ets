@@ -94,6 +94,48 @@ struct WordList {
     void this.init();
   }
 
+  onPageShow(): void {
+    // 页面显示时刷新单词状态，确保与数据库同步
+    // 使用延迟执行，避免影响页面进入动画
+    setTimeout(() => {
+      void this.refreshWordStatus();
+    }, 300);
+  }
+
+  private async refreshWordStatus(): Promise<void> {
+    if (!this.useResourceWords || this.resourceWords.length === 0) {
+      return;
+    }
+    try {
+      // 只检查当前显示的部分单词（前50个），避免大量查询
+      const visibleWords = this.filtered.slice(0, 50);
+      let hasChanges = false;
+
+      for (const visibleWord of visibleWords) {
+        const wordItem = visibleWord as WordItem;
+        // 只检查 id=0 的单词（系统词书单词可能已被插入数据库）
+        if (wordItem.id === 0) {
+          const dbWord = await this.dbManager.getWordByWord(wordItem.word);
+          if (dbWord !== null && (dbWord.status !== wordItem.status || dbWord.id !== wordItem.id)) {
+            hasChanges = true;
+            // 更新 resourceWords 中对应的单词
+            const index = this.resourceWords.findIndex(w => w.word === wordItem.word);
+            if (index >= 0) {
+              this.resourceWords[index] = dbWord;
+            }
+          }
+        }
+      }
+
+      if (hasChanges) {
+        this.resourceWordsSorted = this.sortWords([...this.resourceWords], this.sortType, this.sortDirection);
+        this.applyFilter();
+      }
+    } catch (e) {
+      console.warn('[WordList] refreshWordStatus failed:', e);
+    }
+  }
+
   private async init(): Promise<void> {
     this.isLoading = true;
     this.loadErrorMessage = '';

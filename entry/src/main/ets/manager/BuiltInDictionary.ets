@@ -43,45 +43,65 @@ export class BuiltInDictionary {
     if (this.loaded || this.loading) {
       return;
     }
-    
+
     if (this.resourceMgr === null) {
       console.warn('[BuiltInDictionary] ResourceManager not set, skip loading');
       return;
     }
-    
+
     this.loading = true;
     console.info('[BuiltInDictionary] Starting to load master.txt...');
-    
+
     const startTime = Date.now();
     let totalWords = 0;
-    
+
     try {
       const uint8Array = await this.resourceMgr.getRawFileContent('wordbooks/master.txt');
       const decoder = new util.TextDecoder('utf-8');
       const content = decoder.decode(uint8Array);
       const lines = content.split(/\r?\n/);
-      
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed.length === 0 || trimmed.startsWith('#')) {
-          continue;
+
+      // Process in batches to avoid blocking main thread
+      const BATCH_SIZE = 500;
+      const YIELD_INTERVAL_MS = 16; // ~60fps
+
+      for (let i = 0; i < lines.length; i += BATCH_SIZE) {
+        const batchStartTime = Date.now();
+        const batch = lines.slice(i, i + BATCH_SIZE);
+
+        for (const line of batch) {
+          const trimmed = line.trim();
+          if (trimmed.length === 0 || trimmed.startsWith('#')) {
+            continue;
+          }
+
+          const entry = this.parseLine(trimmed);
+          if (entry !== null && !this.cache.has(entry.word)) {
+            const def = new WordDefinition(
+              entry.word,
+              entry.phonetic,
+              entry.meanings.length > 0 ? entry.meanings[0].pos : '',
+              '',
+              entry.meanings,
+              'builtin'
+            );
+            this.cache.set(entry.word, def);
+            totalWords++;
+          }
         }
-        
-        const entry = this.parseLine(trimmed);
-        if (entry !== null && !this.cache.has(entry.word)) {
-          const def = new WordDefinition(
-            entry.word,
-            entry.phonetic,
-            entry.meanings.length > 0 ? entry.meanings[0].pos : '',
-            '',
-            entry.meanings,
-            'builtin'
-          );
-          this.cache.set(entry.word, def);
-          totalWords++;
+
+        // Yield to event loop every batch or if processing took too long
+        const batchElapsed = Date.now() - batchStartTime;
+        if (batchElapsed > YIELD_INTERVAL_MS || i + BATCH_SIZE < lines.length) {
+          await this.yieldToEventLoop();
+        }
+
+        // Log progress every 5000 words
+        if (totalWords % 5000 < BATCH_SIZE && totalWords > 0) {
+          console.info(`[BuiltInDictionary] Loading progress: ${totalWords} words...`);
         }
       }
-      
+
       this.loaded = true;
       const elapsed = Date.now() - startTime;
       console.info(`[BuiltInDictionary] Loaded ${totalWords} words in ${elapsed}ms`);
@@ -90,6 +110,12 @@ export class BuiltInDictionary {
     } finally {
       this.loading = false;
     }
+  }
+
+  private async yieldToEventLoop(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      setTimeout(() => resolve(), 0);
+    });
   }
   
   private parseLine(line: string): WordBookEntry | null {

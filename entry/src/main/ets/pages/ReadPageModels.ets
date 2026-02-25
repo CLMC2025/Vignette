@@ -32,6 +32,8 @@ export interface PreloadedStory {
   error: string;
   supportWords: string[];
   sourceLabel: string;
+  isUpgraded: boolean;
+  isUpgrading: boolean;
 }
 
 export class DialogState {

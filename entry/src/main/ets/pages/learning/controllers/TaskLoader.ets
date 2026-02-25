@@ -108,6 +108,17 @@ export class ReadPageLoader {
 
     if (storyController) {
         if (storyController.hasPreloadedStory(task.id)) {
+            // Check if we should wait for upgrade (offline/minimal story being upgraded)
+            if (storyController.shouldWaitForUpgrade(task.id)) {
+                console.log(`[TaskLoader] Preloaded story for task ${task.id} is being upgraded, waiting...`);
+                // Wait a bit for upgrade to complete (max 3 seconds)
+                const waitStart = Date.now();
+                const maxWaitMs = 3000;
+                while (storyController.isPreloadedStoryUpgrading(task.id) && Date.now() - waitStart < maxWaitMs) {
+                    await new Promise<void>(resolve => setTimeout(resolve, 100));
+                }
+                console.log(`[TaskLoader] Waited ${Date.now() - waitStart}ms for story upgrade`);
+            }
             // Apply preloaded story. This triggers callbacks in ReadPage.
             // Ensure ReadPage currentWord is already set!
             storyController.applyPreloadedStory(task.id, task.word);

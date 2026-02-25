@@ -1,7 +1,8 @@
-import { picker, fileIo as fs } from '@kit.CoreFileKit';
-import type common from '@ohos.app.ability.common';
+import picker from '@ohos.file.picker';
+import fs from '@ohos.file.fs';
 import { BusinessError } from '@ohos.base';
 import { Base64Util } from './webdav/Base64Util';
+import { HashUtils } from '../utils/HashUtils';
 
 interface ReadSyncOptions {
   offset: number;
@@ -12,6 +13,7 @@ export interface SaveJsonResult {
   ok: boolean;
   cancelled: boolean;
   error: string;
+  checksum?: string; // 新增：导出文件校验和
 }
 
 export interface ReadJsonResult {
@@ -43,10 +45,10 @@ export class DataFileTransfer {
     return { code, message };
   }
 
-  static async saveJsonToPickedFile(context: common.UIAbilityContext, defaultFileName: string, jsonText: string): Promise<SaveJsonResult> {
+  static async saveJsonToPickedFile(defaultFileName: string, jsonText: string): Promise<SaveJsonResult> {
     const documentSaveOptions = new picker.DocumentSaveOptions();
     documentSaveOptions.newFileNames = [defaultFileName];
-    const documentPicker = new picker.DocumentViewPicker(context);
+    const documentPicker = new picker.DocumentViewPicker();
 
     let uris: Array<string> = [];
     try {
@@ -91,10 +93,10 @@ export class DataFileTransfer {
     }
   }
 
-  static async readJsonFromPickedFile(context: common.UIAbilityContext): Promise<ReadJsonResult> {
+  static async readJsonFromPickedFile(): Promise<ReadJsonResult> {
     const documentSelectOptions = new picker.DocumentSelectOptions();
     documentSelectOptions.maxSelectNumber = 1;
-    const documentPicker = new picker.DocumentViewPicker(context);
+    const documentPicker = new picker.DocumentViewPicker();
 
     let uris: Array<string> = [];
     try {

@@ -1,7 +1,7 @@
-import promptAction from '@ohos.promptAction';
+// import promptAction from '@ohos.promptAction';
 import { DBManager, AddToUserWordBookOutcome, UserWordBookBrief } from '../../../database/DBManager';
 import { DictionaryManager, LookupResult } from '../../../manager/DictionaryManager';
-import { WordItem, WordStatus, WordDefinition, LearningSession } from '../../../model/WordModel';
+import { WordItem, WordStatus, WordDefinition, LearningSession, UserActions } from '../../../model/WordModel';
 import { StoryWord, DialogState } from '../../ReadPageModels';
 import { addNotebookWord, removeNotebookWord } from '../../../utils/NotebookWordSet';
 import { TopBannerType } from '../../../ui/TopBanner';
@@ -247,6 +247,19 @@ export class ReadWordInteractionController {
 
     try {
       await this.dbManager.addWordToNotebook(word);
+      
+      // Update user actions in WordItem to reflect note booking
+      const existingWordItem = currentState.wordItem;
+      if (existingWordItem) {
+        const updatedWordItem = existingWordItem.clone();
+        updatedWordItem.userActions.favorite(); // 更新收藏标志
+        await this.dbManager.updateWord(updatedWordItem);
+        // 更新当前状态中的wordItem
+        const next = this.cloneDialogState(getState());
+        next.wordItem = updatedWordItem;
+        this.delegate.onDialogStateChange(next);
+      }
+      
       this.delegate.onShowToast('已收藏');
       
       const latest = getState();
@@ -293,6 +306,19 @@ export class ReadWordInteractionController {
 
     try {
       await this.dbManager.removeWordFromNotebook(word);
+      
+      // Update user actions in WordItem to reflect unbookmarking
+      const existingWordItem = currentState.wordItem;
+      if (existingWordItem) {
+        const updatedWordItem = existingWordItem.clone();
+        updatedWordItem.userActions.unfavorite(); // 更新收藏标志
+        await this.dbManager.updateWord(updatedWordItem);
+        // 更新当前状态中的wordItem
+        const next = this.cloneDialogState(getState());
+        next.wordItem = updatedWordItem;
+        this.delegate.onDialogStateChange(next);
+      }
+      
       this.delegate.onShowToast('已取消收藏');
       
       const latest = getState();
@@ -322,9 +348,27 @@ export class ReadWordInteractionController {
       const userStateManager = UserStateManager.getInstance();
       if (isJoined) {
         await this.dbManager.removeWordFromUserWordBook(bookId, word);
+        
+        // 更新WordItem中的用户词书信息
+        const wordItem = await this.dbManager.getWordByWord(word);
+        if (wordItem) {
+          const updatedWordItem = wordItem.clone();
+          updatedWordItem.userActions.removeFromBook(bookId);
+          await this.dbManager.updateWord(updatedWordItem);
+        }
+        
         this.delegate.onShowToast(`已从“${bookName}”移除`);
       } else {
         const outcome = await this.dbManager.addWordToUserWordBook(bookId, word);
+        
+        // 更新WordItem中的用户词书信息
+        const wordItem = await this.dbManager.getWordByWord(word);
+        if (wordItem) {
+          const updatedWordItem = wordItem.clone();
+          updatedWordItem.userActions.addToBook(bookId);
+          await this.dbManager.updateWord(updatedWordItem);
+        }
+        
         userStateManager.updateWordState(word, UserWordState.ADDED, bookId);
         if (outcome === AddToUserWordBookOutcome.Already) {
           this.delegate.onShowToast(`已加入“${bookName}”`);
@@ -350,6 +394,14 @@ export class ReadWordInteractionController {
     try {
       const bookId = await this.dbManager.createUserWordBook(normalized);
       const outcome = await this.dbManager.addWordToUserWordBook(bookId, word);
+      
+      // 更新WordItem中的用户词书信息
+      const wordItem = await this.dbManager.getWordByWord(word);
+      if (wordItem) {
+        const updatedWordItem = wordItem.clone();
+        updatedWordItem.userActions.addToBook(bookId);
+        await this.dbManager.updateWord(updatedWordItem);
+      }
       
       const userStateManager = UserStateManager.getInstance();
       userStateManager.updateWordState(word, UserWordState.ADDED, bookId);

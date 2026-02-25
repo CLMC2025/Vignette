@@ -77,8 +77,7 @@ export struct SettingsBackupSection {
       const result = await this.syncManager.exportData();
 
       if (result.success) {
-        const context = getContext(this) as common.UIAbilityContext;
-        const saveRes = await DataFileTransfer.saveJsonToPickedFile(context, this.makeBackupFileName(), result.data);
+        const saveRes = await DataFileTransfer.saveJsonToPickedFile(this.makeBackupFileName(), result.data);
         if (saveRes.ok) {
           this.exportResult = '导出成功';
           this.lastExportTime = new Date().toLocaleString();
@@ -118,8 +117,7 @@ export struct SettingsBackupSection {
     this.importResult = '';
     console.info('[Settings]', '开始导入备份');
     try {
-      const context = getContext(this) as common.UIAbilityContext;
-      const readRes = await DataFileTransfer.readJsonFromPickedFile(context);
+      const readRes = await DataFileTransfer.readJsonFromPickedFile();
       if (readRes.ok) {
         const jsonData = readRes.data.trim();
         if (jsonData.length === 0) {

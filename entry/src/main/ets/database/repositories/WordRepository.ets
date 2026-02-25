@@ -135,6 +135,41 @@ export class WordRepository extends BaseRepository {
   }
 
   /**
+   * 模糊搜索单词（大小写不敏感）
+   * @param query 搜索关键词
+   * @param limit 返回结果数量限制
+   * @returns 匹配的单词列表
+   */
+  async searchWords(query: string, limit: number = 10): Promise<WordItem[]> {
+    this.ensureInitialized();
+
+    const queryLower = query.toLowerCase();
+
+    // 获取所有单词，然后在应用层进行大小写不敏感的过滤
+    const predicates = new relationalStore.RdbPredicates(TABLE_WORDS);
+    predicates.orderByAsc(WordColumns.WORD);
+
+    const resultSet = await this.store!.query(predicates);
+    const words: WordItem[] = [];
+
+    try {
+      while (resultSet.goToNextRow()) {
+        const word = this.resultSetToWord(resultSet);
+        // 大小写不敏感的前缀匹配
+        if (word.word.toLowerCase().startsWith(queryLower)) {
+          words.push(word);
+          if (words.length >= limit) {
+            break;
+          }
+        }
+      }
+    } finally {
+      resultSet.close();
+    }
+    return words;
+  }
+
+  /**
    * Get all words
    */
   async getAllWords(): Promise<WordItem[]> {
@@ -179,7 +214,7 @@ export class WordRepository extends BaseRepository {
   }
 
   /**
-   * Get word counts by status
+   * Get word counts by status - optimized with SQL COUNT
    */
   async getWordCounts(): Promise<Map<WordStatus, number>> {
     this.ensureInitialized();
@@ -197,20 +232,25 @@ export class WordRepository extends BaseRepository {
       const predicates = new relationalStore.RdbPredicates(TABLE_WORDS);
       predicates.equalTo(WordColumns.STATUS, status);
 
-      const resultSet = await this.store!.query(predicates);
-      let count = 0;
-      while (resultSet.goToNextRow()) {
-        count++;
+      // Use SQL COUNT instead of fetching all rows
+      const resultSet = await this.store!.query(predicates, ['COUNT(*) AS cnt']);
+      try {
+        if (resultSet.goToFirstRow()) {
+          const count = resultSet.getLong(resultSet.getColumnIndex('cnt'));
+          counts.set(status, count);
+        } else {
+          counts.set(status, 0);
+        }
+      } finally {
+        resultSet.close();
       }
-      resultSet.close();
-      counts.set(status, count);
     }
 
     return counts;
   }
 
   /**
-   * Get review due count
+   * Get review due count - optimized with SQL COUNT
    */
   async getReviewDueCount(): Promise<number> {
     this.ensureInitialized();
@@ -223,14 +263,16 @@ export class WordRepository extends BaseRepository {
       .and()
       .lessThanOrEqualTo(WordColumns.DUE_DATE, now);
 
-    const resultSet = await this.store!.query(predicates);
-    let count = 0;
-    while (resultSet.goToNextRow()) {
-      count++;
+    // Use SQL COUNT instead of fetching all rows
+    const resultSet = await this.store!.query(predicates, ['COUNT(*) AS cnt']);
+    try {
+      if (resultSet.goToFirstRow()) {
+        return resultSet.getLong(resultSet.getColumnIndex('cnt'));
+      }
+      return 0;
+    } finally {
+      resultSet.close();
     }
-    resultSet.close();
-
-    return count;
   }
 
   /**

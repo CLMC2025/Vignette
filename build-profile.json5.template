@@ -1,0 +1,43 @@
+{
+  "apiType": "stageMode",
+  "buildOption": {
+    "resOptions": {
+      "copyCodeResource": {
+        "enable": false
+      }
+    }
+  },
+  "buildOptionSet": [
+    {
+      "name": "release",
+      "arkOptions": {
+        "obfuscation": {
+          "ruleOptions": {
+            "enable": true,
+            "files": [
+              "./obfuscation-rules.txt"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "targets": [
+    {
+      "name": "default"
+    },
+    {
+      "name": "ohosTest"
+    }
+  ],
+  "signingConfigs": {
+    "default": {
+      "type": "HarmonyOS",
+      "storeFile": "<你的签名证书文件路径>.p12",
+      "keyAlias": "你的密钥别名",
+      "keyPwd": "你的密钥密码",
+      "certpath": "<你的证书配置文件路径>.p7b",
+      "profile": "<你的配置文件路径>.p7b"
+    }
+  }
+}

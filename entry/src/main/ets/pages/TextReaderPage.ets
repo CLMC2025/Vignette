@@ -22,6 +22,25 @@ interface TextReaderPageParams {
   textId?: number;
 }
 
+class TextDataSource implements IDataSource {
+  private paragraphs: string[] = [];
+
+  constructor(paragraphs: string[]) {
+    this.paragraphs = paragraphs;
+  }
+
+  totalCount(): number {
+    return this.paragraphs.length;
+  }
+
+  getData(index: number): string {
+    return this.paragraphs[index];
+  }
+
+  registerDataChangeListener(listener: DataChangeListener): void {}
+  unregisterDataChangeListener(listener: DataChangeListener): void {}
+}
+
 @Entry
 @Component
 struct TextReaderPage {
@@ -29,6 +48,8 @@ struct TextReaderPage {
   @State private title: string = '';
   @State private content: string = '';
   @State private isLoading: boolean = true;
+  @State private paragraphs: string[] = [];
+  @State private dataSource: TextDataSource = new TextDataSource([]);
 
   @State private dialogState: DialogState = new DialogState();
   @State private meaningExpanded: boolean = true;
@@ -119,6 +140,8 @@ struct TextReaderPage {
       }
       this.title = row.title ?? '未命名文本';
       this.content = row.content ?? '';
+      this.paragraphs = this.splitParagraphs(this.content);
+      this.dataSource = new TextDataSource(this.paragraphs);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       promptAction.showToast({ message: `加载失败：${msg}`, duration: 1500 });
@@ -135,7 +158,25 @@ struct TextReaderPage {
     for (const p of parts) {
       const trimmed = p.trim();
       if (trimmed.length > 0) {
-        out.push(trimmed);
+        if (trimmed.length > 5000) {
+          const sentences = trimmed.match(/[^.!?]+[.!?]+/g) || [trimmed];
+          let currentChunk = '';
+          for (const sentence of sentences) {
+            if (currentChunk.length + sentence.length > 3000) {
+              if (currentChunk.length > 0) {
+                out.push(currentChunk.trim());
+              }
+              currentChunk = sentence;
+            } else {
+              currentChunk += sentence;
+            }
+          }
+          if (currentChunk.length > 0) {
+            out.push(currentChunk.trim());
+          }
+        } else {
+          out.push(trimmed);
+        }
       }
     }
     return out;
@@ -350,6 +391,10 @@ struct TextReaderPage {
     }
   }
 
+  private isCurrentLookup(seq: number): boolean {
+    return this.dialogLookupSeq === seq;
+  }
+
   private async onWordClick(word: string, contextText: string): Promise<void> {
     const normalizedWord = word.toLowerCase().trim();
     if (normalizedWord.length === 0) {
@@ -359,12 +404,24 @@ struct TextReaderPage {
 
     this.dialogLookupSeq += 1;
     const seq = this.dialogLookupSeq;
+
+    // Early exit check
+    if (!this.isCurrentLookup(seq)) {
+      return;
+    }
+
     const newDialogState = new DialogState();
     newDialogState.isVisible = true;
     newDialogState.word = normalizedWord;
     const peekedBase = this.dictManager.peekDefinition(normalizedWord);
     newDialogState.definition = peekedBase;
     newDialogState.isLoading = peekedBase === null;
+
+    // Check again before state update
+    if (!this.isCurrentLookup(seq)) {
+      return;
+    }
+
     this.dialogState = newDialogState;
     this.meaningExpanded = true;
     this.joinedBookIds = [];
@@ -372,15 +429,15 @@ struct TextReaderPage {
 
     try {
       const wordItem = await this.ensureWordItem(normalizedWord);
-      if (this.dialogLookupSeq !== seq) {
+      if (!this.isCurrentLookup(seq)) {
         return;
       }
       const inNotebook = await this.dbManager.isWordInNotebook(normalizedWord);
-      if (this.dialogLookupSeq !== seq) {
+      if (!this.isCurrentLookup(seq)) {
         return;
       }
       await this.refreshJoinedBooksForDialog(normalizedWord);
-      if (this.dialogLookupSeq !== seq) {
+      if (!this.isCurrentLookup(seq)) {
         return;
       }
 
@@ -390,10 +447,13 @@ struct TextReaderPage {
         state.definition = wordItem.definition;
         state.inNotebook = inNotebook;
         state.isLoading = false;
+        if (!this.isCurrentLookup(seq)) {
+          return;
+        }
         this.dialogState = state;
       } else {
         const baseResult = await this.dictManager.lookup(normalizedWord, '');
-        if (this.dialogLookupSeq !== seq) {
+        if (!this.isCurrentLookup(seq)) {
           return;
         }
         if (baseResult.success && baseResult.definition !== null) {
@@ -421,7 +481,7 @@ struct TextReaderPage {
           updated.dueDate = Date.now();
           updated.updatedAt = Date.now();
           await this.dbManager.updateWord(updated);
-          if (this.dialogLookupSeq !== seq) {
+          if (!this.isCurrentLookup(seq)) {
             return;
           }
           const next = this.dialogState.clone();
@@ -433,7 +493,7 @@ struct TextReaderPage {
       if (normalizedContext.length > 0) {
         const contextKey = this.ctxWordMeaningStore.buildKey(normalizedWord, this.hashContextText(normalizedContext));
         const cachedMeaning = await this.ctxWordMeaningStore.getContextMeaning(contextKey);
-        if (this.dialogLookupSeq !== seq) {
+        if (!this.isCurrentLookup(seq)) {
           return;
         }
         if (cachedMeaning.length > 0) {
@@ -448,7 +508,7 @@ struct TextReaderPage {
         }
         if (this.dictManager.isConfigured()) {
           const generatedMeaning = await this.dictManager.lookupContextMeaning(normalizedWord, normalizedContext);
-          if (this.dialogLookupSeq !== seq) {
+          if (!this.isCurrentLookup(seq)) {
             return;
           }
           if (generatedMeaning.length > 0) {
@@ -464,7 +524,7 @@ struct TextReaderPage {
         }
       }
     } catch (e) {
-      if (this.dialogLookupSeq !== seq) {
+      if (!this.isCurrentLookup(seq)) {
         return;
       }
       const state = this.dialogState.clone();
@@ -541,9 +601,9 @@ struct TextReaderPage {
           .width('100%')
           .justifyContent(FlexAlign.Center)
         } else {
-          Scroll() {
-            Column({ space: 14 }) {
-              ForEach(this.splitParagraphs(this.content), (p: string, idx: number) => {
+          List() {
+            LazyForEach(this.dataSource, (p: string, idx: number) => {
+              ListItem() {
                 Column() {
                   ClickableText({
                     text: p,
@@ -558,13 +618,14 @@ struct TextReaderPage {
                 .padding(14)
                 .backgroundColor(this.colors.SURFACE_PRIMARY)
                 .borderRadius(14)
-              }, (_: string, idx: number) => `p-${idx}`)
-            }
-            .width('100%')
-            .padding({ left: 16, right: 16, bottom: 16 })
+              }
+            }, (p: string, idx: number) => `p-${idx}`)
           }
+          .width('100%')
           .layoutWeight(1)
+          .cachedCount(3)
           .scrollBar(BarState.Off)
+          .padding({ left: 16, right: 16, bottom: 16 })
         }
       }
       .width('100%')

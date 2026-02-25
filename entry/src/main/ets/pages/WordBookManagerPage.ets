@@ -24,6 +24,8 @@ struct WordBookManagerPage {
   @State loadErrorMessage: string = '';
   @State searchText: string = '';
   @State showSearchInput: boolean = false;
+  @State showSearchSuggestions: boolean = false;
+  @State searchSuggestions: BookCardData[] = [];
 
   @State showCreateBook: boolean = false;
   @State newBookName: string = '';
@@ -46,6 +48,7 @@ struct WordBookManagerPage {
   private isNavigating: boolean = false;
   private isDataLoaded: boolean = false;
   private readonly DEFAULT_BOOK_COVER: string = JSON.stringify(['#a8edea', '#fed6e3']);
+  private searchDebounceTimer: number = -1;
 
   aboutToAppear(): void {
     const ctx = getContext(this) as common.UIAbilityContext | null;
@@ -176,16 +179,58 @@ struct WordBookManagerPage {
 
   private getFilteredBooks(): BookCardData[] {
     let allBooks = [...this.userBooks, ...this.systemBooks];
-    
+
     if (this.searchText.trim().length > 0) {
       const keyword = this.searchText.trim().toLowerCase();
-      allBooks = allBooks.filter(b => 
+      allBooks = allBooks.filter(b =>
         b.name.toLowerCase().includes(keyword) ||
         (b.description ?? '').toLowerCase().includes(keyword)
       );
     }
-    
+
     return allBooks;
+  }
+
+  private onSearchInputChange(value: string): void {
+    this.searchText = value;
+
+    if (this.searchDebounceTimer !== -1) {
+      clearTimeout(this.searchDebounceTimer);
+    }
+
+    if (value.trim().length === 0) {
+      this.showSearchSuggestions = false;
+      this.searchSuggestions = [];
+      return;
+    }
+
+    this.searchDebounceTimer = setTimeout(() => {
+      this.updateSearchSuggestions(value);
+    }, 200);
+  }
+
+  private updateSearchSuggestions(query: string): void {
+    const keyword = query.trim().toLowerCase();
+    if (keyword.length === 0) {
+      this.showSearchSuggestions = false;
+      this.searchSuggestions = [];
+      return;
+    }
+
+    const allBooks = [...this.userBooks, ...this.systemBooks];
+    const filtered = allBooks.filter(b =>
+      b.name.toLowerCase().includes(keyword) ||
+      (b.description ?? '').toLowerCase().includes(keyword)
+    );
+
+    this.searchSuggestions = filtered.slice(0, 5);
+    this.showSearchSuggestions = this.searchSuggestions.length > 0;
+  }
+
+  private onSearchSuggestionClick(book: BookCardData): void {
+    this.showSearchSuggestions = false;
+    this.searchText = book.name;
+    void this.handleBookClick(book.id);
   }
 
   private async handleBookClick(id: string): Promise<void> {
@@ -619,15 +664,52 @@ struct WordBookManagerPage {
             .padding(8);
 
           if (this.showSearchInput) {
-            TextInput({ text: this.searchText, placeholder: '搜索' })
-              .width(100)
-              .height(32)
-              .fontSize(13)
-              .backgroundColor(this.colors.GRAY_100)
-              .borderRadius(8)
-              .onChange((value: string) => {
-                this.searchText = value;
-              });
+            Column() {
+              TextInput({ text: this.searchText, placeholder: '搜索词书' })
+                .width(120)
+                .height(32)
+                .fontSize(13)
+                .backgroundColor(this.colors.GRAY_100)
+                .borderRadius(8)
+                .onChange((value: string) => {
+                  this.onSearchInputChange(value);
+                })
+
+              if (this.showSearchSuggestions && this.searchSuggestions.length > 0) {
+                List() {
+                  ForEach(this.searchSuggestions, (book: BookCardData, index: number) => {
+                    ListItem() {
+                      Row() {
+                        Text(book.name)
+                          .fontSize(13)
+                          .fontColor(this.colors.TEXT_PRIMARY)
+                          .layoutWeight(1)
+                          .maxLines(1)
+                          .textOverflow({ overflow: TextOverflow.Ellipsis })
+
+                        Text(`${book.wordCount}词`)
+                          .fontSize(11)
+                          .fontColor(this.colors.GRAY_400)
+                      }
+                      .width('100%')
+                      .padding({ left: 8, right: 8, top: 8, bottom: 8 })
+                    }
+                    .onClick(() => {
+                      this.onSearchSuggestionClick(book);
+                    })
+                  }, (book: BookCardData) => book.id)
+                }
+                .width(120)
+                .height(Math.min(this.searchSuggestions.length * 36, 150))
+                .backgroundColor(this.colors.SURFACE_PRIMARY)
+                .borderRadius(8)
+                .margin({ top: 4 })
+                .divider({ strokeWidth: 0.5, color: this.colors.GRAY_200 })
+                .position({ x: 0, y: 36 })
+              }
+            }
+            .position({ x: 0, y: 0 })
+            .zIndex(100)
           } else {
             Text('🔍')
               .fontSize(18)

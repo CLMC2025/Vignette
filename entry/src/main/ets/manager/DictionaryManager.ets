@@ -57,7 +57,23 @@ export class DictionaryManager implements StoryGenerator {
     return DictionaryManager.instance;
   }
 
-  configure(baseUrl: string, apiKey: string, model: string = 'deepseek-chat'): void {
+  /**
+   * 配置 AI 服务地址和 API 密钥
+   * @param baseUrl AI 服务基础地址
+   * @param apiKey API 密钥
+   * @param model 模型名称
+   * @throws Error 当 baseUrl 不是 HTTPS 协议时抛出错误
+   */
+  configure(baseUrl: string, apiKey: string, model: string = 'deep-chat'): void {
+    // 强制要求 HTTPS 协议（本地开发环境除外）
+    if (Constants.SECURITY_REQUIRE_HTTPS_FOR_AI) {
+      const isLocalhost = baseUrl.startsWith('http://localhost') || baseUrl.startsWith('http://127.0.0.1');
+      if (!baseUrl.startsWith('https://') && !isLocalhost) {
+        console.error('[DictionaryManager] 拒绝配置：AI 服务地址必须使用 HTTPS 协议以保证数据安全');
+        throw new Error('AI 服务地址必须使用 HTTPS 协议，或使用 http://localhost/127.0.0.1 进行本地开发');
+      }
+    }
+    
     this.aiClient.configure(baseUrl, apiKey, model);
     console.info('[DictionaryManager] API configured');
   }
@@ -119,7 +135,7 @@ export class DictionaryManager implements StoryGenerator {
       return LookupResult.createFailure('Word too long');
     }
 
-    if (!/^[a-zA-Z'\-]+$/.test(normalizedWord)) {
+    if (!/^[a-zA-Z'\-\.]+$/.test(normalizedWord)) {
       return LookupResult.createFailure('Invalid word format');
     }
 

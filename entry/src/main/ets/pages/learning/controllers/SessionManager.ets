@@ -158,7 +158,7 @@ export class ReadPageSessionManager {
       let usedStore: boolean = false;
       const sessionId = String(routerParams?.sessionId ?? '');
       if (sessionId.trim().length > 0) {
-        const taken = SessionTransferStore.getInstance().take(sessionId);
+        const taken = await SessionTransferStore.getInstance().take(sessionId);
         if (taken !== null) {
           rawQueue = taken;
           usedStore = true;

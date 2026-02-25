@@ -15,9 +15,9 @@
 
 ## 📱 截图
 
-| 首页 | 学习页 | 单词详情 |
+| 首页 | 学习页 | 词书列表 |
 |:---:|:---:|:---:|
-| ![首页](screenshots/home.png) | ![学习](screenshots/learn.png) | ![详情](screenshots/detail.png) |
+| ![首页](screenshots/home.png) | ![学习](screenshots/learn.png) | ![词书](screenshots/detail.png) |
 
 ## 🛠️ 技术栈
 
@@ -39,8 +39,13 @@
    git clone https://github.com/CLMC2025/vignette.git
    ```
 3. 用 DevEco Studio 打开项目
-4. 连接设备或启动模拟器
-5. 点击运行
+4. **配置签名证书**（重要！）
+   - 本项目的 `build-profile.json5` 已加入 `.gitignore`，不会上传到仓库
+   - 你需要配置自己的签名证书才能构建安装包
+   - 参考 [HarmonyOS 应用签名指南](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides-V5/ide-signing-V5) 获取证书
+   - 在 DevEco Studio 中：`File` → `Project Structure` → `Project` → `Signing Configs`
+5. 连接设备或启动模拟器
+6. 点击运行
 
 ## ⚙️ 配置
 
@@ -60,6 +65,16 @@
 
 欢迎提交 Issue 和 Pull Request！
 
+### 不懂代码？一样可以贡献
+
+- 🐛 帮忙测试，反馈 bug
+- 💬 分享你的学习心得
+- 🎨 给 UI/UX 提建议
+- 🌍 帮忙翻译成其他语言
+- 📢 扩散给需要的朋友
+
+### 开发者贡献
+
 1. Fork 本仓库
 2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
 3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
@@ -72,10 +87,22 @@
 
 ## 📮 联系方式
 
-- 邮箱：c_k1@foxmail.com
+- 邮箱：5@941985.xyz
 - QQ群：1077476965
 
-## 🙏 致谢
+## � 支持项目
+
+如果这个项目对你有帮助，欢迎请我喝杯咖啡 ☕
+
+- [爱发电](https://afdian.com/a/weiyudanci) - 支持开发者持续维护
+
+## �🙏 致谢
 
 - [FSRS Algorithm](https://github.com/open-spaced-repetition/fsrs4anki) - 间隔重复算法
 - [Anki](https://github.com/ankitects/anki) - 设计灵感
+
+## 💭 一个特别的备注
+
+这个应用是我在完全不懂编程的情况下，用 AI 辅助完成的第一个鸿蒙项目。它可能不完美，但它代表着一个普通学习者的理想——用自己真正想要的方式，去学语言。
+
+如果你也喜欢这个想法，欢迎提 Issue、提 PR，或者只是进群聊聊你的学习故事。每一个反馈，都会让这个应用变得更好一点点。

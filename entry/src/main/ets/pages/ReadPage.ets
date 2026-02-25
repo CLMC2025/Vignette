@@ -420,7 +420,7 @@ struct ReadPage {
     (_message: string): void => {},
     (_type: TopBannerType, _message: string, _duration?: number): void => {}
   );
-  private persistenceController: ReadPersistenceController = new ReadPersistenceController();
+  private persistenceController: ReadPersistenceController = ReadPersistenceController.getInstance();
   private contextController: ReadContextController | null = null;
   private readonly emptyWord: WordItem = new WordItem();
 
@@ -438,8 +438,6 @@ struct ReadPage {
   // Track if current task has been reviewed (prevent duplicate submissions)
   private currentTaskReviewed: boolean = false;
   @State private sessionCompleted: boolean = false;
-  private readonly STORAGE_KEY_SESSION_CONTEXT: string = 'read_page_session_context';
-  private readonly SESSION_CONTEXT_MAX_AGE_MS: number = 6 * 60 * 60 * 1000;
 
 
   private pushHistoryBeforeReview(): void {
@@ -471,15 +469,15 @@ struct ReadPage {
 
 
   private loadSeenContextIds(): void {
-    this.seenContextIds = this.seenContextStore.load();
+    this.seenContextIds = this.seenContextStore.loadSync();
   }
 
   private persistSeenContextIds(): void {
-    this.seenContextStore.save(this.seenContextIds);
+    this.seenContextStore.saveSync(this.seenContextIds);
   }
 
   // Removed persisted task methods as they are now in ReadPersistenceController
-  private persistSessionContext(): void {
+  private async persistSessionContext(): Promise<void> {
     if (this.sessionCompleted) {
       return;
     }
@@ -489,7 +487,7 @@ struct ReadPage {
     const attempts = this.sessionManager?.getTodayAttemptsMap() ?? this.todayAttemptsByWordId;
     const reinforcements = this.sessionManager?.getReinforcementInsertedMap() ?? this.reinforcementInsertedCountByWordId;
 
-    this.persistenceController.persistSessionContext(
+    await this.persistenceController.persistSessionContext(
       taskQueue,
       taskIndex,
       this.contextSequence,
@@ -497,16 +495,18 @@ struct ReadPage {
       this.seenContextIds,
       this.session,
       attempts,
-      reinforcements
+      reinforcements,
+      this.storyText,
+      this.storyTranslation
     );
   }
 
-  private clearPersistedSessionContext(): void {
-    this.persistenceController.clearPersistedSessionContext();
+  private async clearPersistedSessionContext(): Promise<void> {
+    await this.persistenceController.clearPersistedSessionContext();
   }
 
-  private tryRestoreSessionContext(): boolean {
-    const state = this.persistenceController.tryRestoreSessionContext();
+  private async tryRestoreSessionContext(): Promise<boolean> {
+    const state = await this.persistenceController.tryRestoreSessionContext();
     if (state === null) {
       return false;
     }
@@ -514,7 +514,7 @@ struct ReadPage {
     try {
       const rebuiltQueue = this.persistenceController.rebuildTaskQueue(state.taskQueue);
       if (rebuiltQueue.length === 0) {
-        this.clearPersistedSessionContext();
+        await this.clearPersistedSessionContext();
         return false;
       }
 
@@ -546,10 +546,18 @@ struct ReadPage {
       }
 
       this.currentTaskReviewed = false;
+      
+      // Restore story text if available
+      if (state.storyText && state.storyText.length > 0) {
+        this.storyText = state.storyText;
+        this.storyTranslation = state.storyTranslation ?? '';
+        console.info('[ReadPage] tryRestoreSessionContext: restored story text');
+      }
+      
       this.triggerLoadCurrentTask();
       return true;
     } catch (e) {
-      this.clearPersistedSessionContext();
+      await this.clearPersistedSessionContext();
       return false;
     }
   }
@@ -897,7 +905,7 @@ struct ReadPage {
   private settingsConfigured: boolean = false;
   private settingsLoadInFlight: Promise<void> | null = null;
   private lastSettingsLoadMs: number = 0;
-  private readonly seenContextStore: SeenContextStore = new SeenContextStore('seen_context_ids_v2', 2000);
+  private readonly seenContextStore: SeenContextStore = SeenContextStore.getInstance('seen_context_ids_v2', 2000);
   private seenContextIds: Set<string> = new Set<string>();
   private todayAttemptsByWordId: Map<number, number> = new Map<number, number>();
   private reinforcementInsertedCountByWordId: Map<number, number> = new Map<number, number>();
@@ -1082,9 +1090,25 @@ struct ReadPage {
     void this.systemTts.ensureReady();
 
     void this.loadUserSettingsAsync();
-    this.initializeSession();
+    void this.tryRestoreAndInitSession();
 
     console.log(`[Perf] ReadPage aboutToAppear took ${Date.now() - startTime}ms`);
+  }
+
+  private async tryRestoreAndInitSession(): Promise<void> {
+    console.log('[ReadPage] tryRestoreAndInitSession: attempting to restore session context');
+    const restored = await this.tryRestoreSessionContext();
+    if (restored) {
+      console.log('[ReadPage] tryRestoreAndInitSession: session restored successfully');
+      return;
+    }
+    console.log('[ReadPage] tryRestoreAndInitSession: no saved session, initializing new session');
+    await this.initializeSession();
+  }
+
+  onPageHide(): void {
+    console.log('[ReadPage] onPageHide triggered, persisting session context');
+    void this.persistSessionContext();
   }
 
   aboutToDisappear(): void {
@@ -1093,7 +1117,7 @@ struct ReadPage {
 
     this.clearTargetHighlightTimer();
     this.clearBannerTimer();
-    this.persistSessionContext();
+    void this.persistSessionContext();
     
     // End timebox session
     this.timeboxManager.endSession();
@@ -1151,6 +1175,14 @@ struct ReadPage {
         this.selectedContextStyle = settings.contextStyle as ContextStyle;
         this.selectedDifficultyLevel = settings.difficultyLevel as DifficultyLevel;
         this.dictManager.setContextPreferences(this.selectedContextStyle, this.selectedDifficultyLevel);
+        // Sync settings to storyController
+        if (this.storyController) {
+          this.storyController.selectedContextStyle = this.selectedContextStyle;
+          this.storyController.selectedDifficultyLevel = this.selectedDifficultyLevel;
+          this.storyController.newbieMode = this.newbieMode;
+          this.storyController.contextLengthMin = this.contextLengthMin;
+          this.storyController.contextLengthMax = this.contextLengthMax;
+        }
         // Configure API (optional)
         this.dictManager.configure(settings.apiBaseUrl, apiKey, settings.apiModel);
         this.settingsConfigured = this.dictManager.isConfigured();
@@ -1535,6 +1567,9 @@ struct ReadPage {
       },
       onMoveToNext: (): void => {
         this.moveToNextTaskWithDelay();
+      },
+      onPersistSession: async (): Promise<void> => {
+        await this.persistSessionContext();
       }
     };
     const result = await ReadPageReviewHandler.processReview(
@@ -1905,7 +1940,9 @@ struct ReadPage {
           words: parsedWords,
           error: snap.storyError,
           supportWords: [...snap.supportWords],
-          sourceLabel: '恢复'
+          sourceLabel: '恢复',
+          isUpgraded: true,
+          isUpgrading: false
         };
         this.storyController.restorePreloadedStory(currentTask.id, preloaded);
       }
@@ -1983,7 +2020,7 @@ struct ReadPage {
    */
   private showSessionComplete(): void {
     this.sessionCompleted = true;
-    this.clearPersistedSessionContext();
+    void this.clearPersistedSessionContext();
     // Check if any words were actually learned
     const totalLearned = this.session.reviewedCount + this.session.newLearnedCount;
 

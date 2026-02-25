@@ -20,12 +20,15 @@ import {
   WebDavSettings, WebDavManifest, WebDavSyncResult, WebDavSyncStatus, 
   WebDavBackupPlainResult, safeTrim, normalizeRoot, generateDeviceId,
   BACKUP_FILE_NAME, EVENTS_FILE_NAME, TEMPLATE_PACK_FILE_NAME,
-  WORDS_DELTA_FILE_NAME, DEFINITIONS_FILE_NAME
+  WORDS_DELTA_FILE_NAME, DEFINITIONS_FILE_NAME,
+  NOTEBOOK_FILE_NAME, TEXTS_FILE_NAME
 } from './webdav/WebDavCommon';
 import { WebDavBackupManager } from './webdav/WebDavBackupManager';
 import { WebDavEventsSync } from './webdav/WebDavEventsSync';
 import { WebDavModelSync } from './webdav/WebDavModelSync';
 import { WebDavIncrementalSync } from './webdav/WebDavIncrementalSync';
+import { WebDavNotebookSync } from './webdav/WebDavNotebookSync';
+import { WebDavTextsSync } from './webdav/WebDavTextsSync';
 import taskpool from '@ohos.taskpool';
 import { 
   executeBackupUpload, 
@@ -103,12 +106,16 @@ export class WebDavSyncManager {
   private eventsSync: WebDavEventsSync;
   private modelSync: WebDavModelSync;
   private incrementalSync: WebDavIncrementalSync;
+  private notebookSync: WebDavNotebookSync;
+  private textsSync: WebDavTextsSync;
 
   private constructor() {
     this.backupManager = new WebDavBackupManager(this.syncManager, this.store);
     this.eventsSync = new WebDavEventsSync(this.db, this.store);
     this.modelSync = new WebDavModelSync(this.store);
     this.incrementalSync = new WebDavIncrementalSync(this.syncManager, this.store);
+    this.notebookSync = new WebDavNotebookSync(this.db, this.store);
+    this.textsSync = new WebDavTextsSync(this.db, this.store);
   }
 
   static getInstance(): WebDavSyncManager {
@@ -247,6 +254,14 @@ export class WebDavSyncManager {
 
   private definitionsFilePath(): string {
     return this.composeRemotePath(this.remoteLayoutBase, this.remoteLayoutPrefix, DEFINITIONS_FILE_NAME);
+  }
+
+  private notebookFilePath(): string {
+    return this.composeRemotePath(this.remoteLayoutBase, this.remoteLayoutPrefix, NOTEBOOK_FILE_NAME);
+  }
+
+  private textsFilePath(): string {
+    return this.composeRemotePath(this.remoteLayoutBase, this.remoteLayoutPrefix, TEXTS_FILE_NAME);
   }
 
   private isCollectionReachable(statusCode: number): boolean {
@@ -815,17 +830,18 @@ export class WebDavSyncManager {
       };
       const eventsDownloadResult = await this.executeTaskWithFallback<DownloadTaskParams, DownloadTaskResult>(executeDownload, executeDownloadMainThread, eventsDownloadParams);
 
-      // Bug fix: 当 MAC 校验失败时，不中止同步，而是跳过事件下载并继续上传本地数据覆盖云端
       let eventsDownloadSkipped = false;
       if (!eventsDownloadResult.success) {
-        // 检查是否为 MAC 校验失败或密码错误
         if (eventsDownloadResult.detail.includes('MAC verification failed') || 
             eventsDownloadResult.detail.includes('同步密码错误') ||
             eventsDownloadResult.detail.includes('云端数据已损坏')) {
-          console.warn(`[WebDavSyncManager] Step 3 MAC verification failed, skipping download and will re-upload: ${eventsDownloadResult.detail}`);
-          eventsDownloadSkipped = true;
+          console.warn(`[WebDavSyncManager] Step 3 MAC verification failed: ${eventsDownloadResult.detail}`);
+          return WebDavSyncResult.needConfirm(
+            '云端数据校验失败',
+            eventsDownloadResult.detail,
+            'mac_verification_failed'
+          );
         } else {
-          // 其他错误仍然返回失败
           console.error(`[WebDavSyncManager] Step 3 failed: ${eventsDownloadResult.detail}`);
           return WebDavSyncResult.fail('增量同步失败（事件下载）', eventsDownloadResult.detail);
         }
@@ -896,13 +912,78 @@ export class WebDavSyncManager {
         console.info('[WebDavSyncManager] No events to upload, skipping step 4');
       }
 
+      // yield 给 UI 线程
+      await safeYield();
+
+      // ========== 步骤 5: 单词本同步 ==========
+      console.info('[WebDavSyncManager] ===== Step 5/6: Notebook sync =====');
+      const step5StartMs = Date.now();
+      const notebookResult = await this.notebookSync.downloadAndMergeNotebook(
+        client,
+        this.settings,
+        this.manifest,
+        this.rootPath()
+      );
+      if (!notebookResult.success) {
+        console.error(`[WebDavSyncManager] Step 5 download failed: ${notebookResult.detail}`);
+        return WebDavSyncResult.fail('增量同步失败（单词本下载）', notebookResult.detail);
+      }
+      console.info(`[WebDavSyncManager] Step 5 download complete: ${notebookResult.message}`);
+
+      await safeYield();
+
+      const notebookUploadResult = await this.notebookSync.uploadNotebook(
+        client,
+        this.settings,
+        this.manifest,
+        this.rootPath()
+      );
+      if (!notebookUploadResult.success) {
+        console.error(`[WebDavSyncManager] Step 5 upload failed: ${notebookUploadResult.detail}`);
+        return WebDavSyncResult.fail('增量同步失败（单词本上传）', notebookUploadResult.detail);
+      }
+      const step5Ms = Date.now() - step5StartMs;
+      console.info(`[WebDavSyncManager] Step 5 complete ms=${step5Ms}: ${notebookUploadResult.message}`);
+
+      // yield 给 UI 线程
+      await safeYield();
+
+      // ========== 步骤 6: 文本库同步 ==========
+      console.info('[WebDavSyncManager] ===== Step 6/6: Texts sync =====');
+      const step6StartMs = Date.now();
+      const textsResult = await this.textsSync.downloadAndMergeTexts(
+        client,
+        this.settings,
+        this.manifest,
+        this.rootPath()
+      );
+      if (!textsResult.success) {
+        console.error(`[WebDavSyncManager] Step 6 download failed: ${textsResult.detail}`);
+        return WebDavSyncResult.fail('增量同步失败（文本库下载）', textsResult.detail);
+      }
+      console.info(`[WebDavSyncManager] Step 6 download complete: ${textsResult.message}`);
+
+      await safeYield();
+
+      const textsUploadResult = await this.textsSync.uploadTexts(
+        client,
+        this.settings,
+        this.manifest,
+        this.rootPath()
+      );
+      if (!textsUploadResult.success) {
+        console.error(`[WebDavSyncManager] Step 6 upload failed: ${textsUploadResult.detail}`);
+        return WebDavSyncResult.fail('增量同步失败（文本库上传）', textsUploadResult.detail);
+      }
+      const step6Ms = Date.now() - step6StartMs;
+      console.info(`[WebDavSyncManager] Step 6 complete ms=${step6Ms}: ${textsUploadResult.message}`);
+
       const totalSyncMs = Date.now() - syncStartMs;
       console.info(`[WebDavSyncManager] ==== Sync completed successfully total_ms=${totalSyncMs} ====`);
-      
-      // 如果事件下载被跳过（因为 MAC 校验失败），提示用户事件已重新上传
-      if (eventsDownloadSkipped) {
-        return WebDavSyncResult.ok('同步完成（已重新上传事件数据覆盖云端损坏文件）');
-      }
+
+      // Delay status reset to prevent UI jank
+      await this.delayedStatusReset(WebDavSyncStatus.IDLE, 50);
+
       return WebDavSyncResult.ok('同步完成');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -911,11 +992,109 @@ export class WebDavSyncManager {
       if (stack) {
         console.error(`[WebDavSyncManager] Stack trace: ${stack}`);
       }
+      // Delay status reset to prevent UI jank
+      await this.delayedStatusReset(WebDavSyncStatus.ERROR, 50);
       return WebDavSyncResult.fail('增量同步失败', msg);
+    }
+  }
+
+  private async delayedStatusReset(status: WebDavSyncStatus, delayMs: number): Promise<void> {
+    await new Promise<void>((resolve) => {
+      setTimeout(() => {
+        this.status = status;
+        console.info(`[WebDavSyncManager] Sync status reset to ${status}`);
+        resolve();
+      }, delayMs);
+    });
+  }
+
+  async syncIncrementalForceUpload(): Promise<WebDavSyncResult> {
+    console.info('[WebDavSyncManager] ==== Starting force upload sync ====');
+    const syncStartMs = Date.now();
+    
+    const missing = this.requireConfigured();
+    if (missing !== null) {
+      return missing;
+    }
+
+    if (this.status === WebDavSyncStatus.SYNCING) {
+      return WebDavSyncResult.fail('同步操作正在进行中', '请等待当前同步完成后再试');
+    }
+
+    this.status = WebDavSyncStatus.SYNCING;
+    const dbManager = DBManager.getInstance();
+    const syncManager = DataSyncManager.getInstance();
+
+    try {
+      const client = this.createClient();
+      const preflight = await this.preflightRemoteRoot(client);
+      if (preflight !== null) {
+        return preflight;
+      }
+
+      console.info('[WebDavSyncManager] Force uploading local data to cloud');
+
+      const exportResult = await syncManager.exportIncremental(0, true);
+      if (!exportResult.success) {
+        return WebDavSyncResult.fail('导出数据失败', exportResult.error);
+      }
+
+      await safeYield();
+
+      if (exportResult.data.length > 0) {
+        const uploadParams: UploadTaskWithEncryptParams = {
+          endpoint: this.settings.endpoint,
+          username: this.settings.username,
+          password: this.settings.password,
+          syncPassword: this.settings.syncPassword,
+          remoteRoot: this.settings.remoteRoot,
+          manifestJson: this.manifest.toJSON(),
+          remoteFile: this.wordsDeltaFilePath(),
+          plainData: exportResult.data
+        };
+        const uploadResult = await this.executeTaskWithFallback<UploadTaskWithEncryptParams, UploadTaskResult>(executeUploadWithEncrypt, executeUploadWithEncryptMainThread, uploadParams);
+
+        if (!uploadResult.success) {
+          return WebDavSyncResult.fail('上传数据失败', uploadResult.detail);
+        }
+      }
+
+      await safeYield();
+
+      const events = await dbManager.getReviewEventsAfter(0);
+      if (events.length > 0) {
+        const eventsJsonl = this.serializeEventsJsonl(events);
+        const eventsUploadParams: UploadTaskWithEncryptParams = {
+          endpoint: this.settings.endpoint,
+          username: this.settings.username,
+          password: this.settings.password,
+          syncPassword: this.settings.syncPassword,
+          remoteRoot: this.settings.remoteRoot,
+          manifestJson: this.manifest.toJSON(),
+          remoteFile: this.eventsFilePath(),
+          plainData: eventsJsonl
+        };
+        const eventsUploadResult = await this.executeTaskWithFallback<UploadTaskWithEncryptParams, UploadTaskResult>(executeUploadWithEncrypt, executeUploadWithEncryptMainThread, eventsUploadParams);
+
+        if (!eventsUploadResult.success) {
+          return WebDavSyncResult.fail('上传事件失败', eventsUploadResult.detail);
+        }
+      }
+
+      this.manifest.lastWordsSyncMs = Date.now();
+      this.manifest.lastEventsSyncMs = Date.now();
+      await this.store.saveManifestJson(this.manifest.toJSON());
+
+      const totalSyncMs = Date.now() - syncStartMs;
+      console.info(`[WebDavSyncManager] Force upload completed total_ms=${totalSyncMs}`);
+      
+      return WebDavSyncResult.ok('强制上传完成，云端数据已被本地数据覆盖');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`[WebDavSyncManager] Force upload failed: ${msg}`);
+      return WebDavSyncResult.fail('强制上传失败', msg);
     } finally {
-      // 确保状态总是重置为 IDLE
       this.status = WebDavSyncStatus.IDLE;
-      console.info('[WebDavSyncManager] Sync status reset to IDLE');
     }
   }
 

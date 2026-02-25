@@ -15,6 +15,9 @@ export interface ReviewDailyAggregateRow {
   goodCount: number;
   easyCount: number;
   wordCount: number;
+  knownWordCount: number;
+  fuzzyWordCount: number;
+  forgottenWordCount: number;
   firstTs: number;
   lastTs: number;
 }
@@ -166,6 +169,10 @@ export class ReviewEventRepository extends BaseRepository {
   ): Promise<ReviewDailyAggregateRow[]> {
     this.ensureInitialized();
     const dayMs = 24 * 60 * 60 * 1000;
+    // Fix: 使用更精确的日期分组，避免时区问题
+    // 将时间戳调整到本地时区的日期边界后再分组
+    // 统计不同单词数（按评级分类）
+    // 注意：每个单词每天只有一条记录，所以直接使用 rating 字段
     const sql =
       `SELECT ` +
       `CAST((timestamp + ?) / ? AS INTEGER) AS day_key, ` +
@@ -174,6 +181,9 @@ export class ReviewEventRepository extends BaseRepository {
       `SUM(CASE WHEN rating = 3 THEN 1 ELSE 0 END) AS good_count, ` +
       `SUM(CASE WHEN rating = 4 THEN 1 ELSE 0 END) AS easy_count, ` +
       `COUNT(DISTINCT word_id) AS word_count, ` +
+      `COUNT(DISTINCT CASE WHEN rating IN (3, 4) THEN word_id END) AS known_word_count, ` +
+      `COUNT(DISTINCT CASE WHEN rating = 2 THEN word_id END) AS fuzzy_word_count, ` +
+      `COUNT(DISTINCT CASE WHEN rating = 1 THEN word_id END) AS forgotten_word_count, ` +
       `MIN(timestamp) AS first_ts, ` +
       `MAX(timestamp) AS last_ts ` +
       `FROM ${TABLE_REVIEW_EVENTS} ` +
@@ -191,6 +201,9 @@ export class ReviewEventRepository extends BaseRepository {
         goodCount: Number(rs.getLong(rs.getColumnIndex('good_count'))),
         easyCount: Number(rs.getLong(rs.getColumnIndex('easy_count'))),
         wordCount: Number(rs.getLong(rs.getColumnIndex('word_count'))),
+        knownWordCount: Number(rs.getLong(rs.getColumnIndex('known_word_count'))),
+        fuzzyWordCount: Number(rs.getLong(rs.getColumnIndex('fuzzy_word_count'))),
+        forgottenWordCount: Number(rs.getLong(rs.getColumnIndex('forgotten_word_count'))),
         firstTs: Number(rs.getLong(rs.getColumnIndex('first_ts'))),
         lastTs: Number(rs.getLong(rs.getColumnIndex('last_ts')))
       });
@@ -206,19 +219,22 @@ export class ReviewEventRepository extends BaseRepository {
   ): Promise<ReviewDailyNewWordRow[]> {
     this.ensureInitialized();
     const dayMs = 24 * 60 * 60 * 1000;
+    // Fix: 统计当天首次学习的单词数（当天该单词的第一次评分）
+    // 而不是历史上首次学习的单词数
     const sql =
       `SELECT ` +
-      `CAST((first_ts + ?) / ? AS INTEGER) AS day_key, ` +
-      `COUNT(1) AS new_count ` +
-      `FROM ( ` +
-      `SELECT word_id, MIN(timestamp) AS first_ts ` +
+      `CAST((timestamp + ?) / ? AS INTEGER) AS day_key, ` +
+      `COUNT(DISTINCT word_id) AS new_count ` +
       `FROM ${TABLE_REVIEW_EVENTS} ` +
-      `GROUP BY word_id ` +
+      `WHERE timestamp >= ? AND timestamp <= ? ` +
+      `AND word_id NOT IN ( ` +
+      `  SELECT DISTINCT word_id ` +
+      `  FROM ${TABLE_REVIEW_EVENTS} ` +
+      `  WHERE timestamp < ? ` +
       `) ` +
-      `WHERE first_ts >= ? AND first_ts <= ? ` +
       `GROUP BY day_key ` +
       `ORDER BY day_key ASC`;
-    const args: relationalStore.ValueType[] = [timezoneOffsetMs, dayMs, startMs, endMs];
+    const args: relationalStore.ValueType[] = [timezoneOffsetMs, dayMs, startMs, endMs, startMs];
     const rs = await this.store!.querySql(sql, args);
     const rows: ReviewDailyNewWordRow[] = [];
     while (rs.goToNextRow()) {

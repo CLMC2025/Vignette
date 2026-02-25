@@ -3,6 +3,9 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
 import { AutoWebDavSyncManager } from '../sync/AutoWebDavSyncManager';
 import { WordLevelLoader } from '../manager/WordLevelLoader';
+import { SessionTransferStore } from '../utils/SessionTransferStore';
+import { ReadPersistenceController } from '../pages/ReadPersistenceController';
+import { SeenContextStore } from '../utils/SeenContextStore';
 
 const DOMAIN = 0x0000;
 const TAG = 'WeiyuApp';
@@ -25,6 +28,27 @@ export default class EntryAbility extends UIAbility {
     hilog.info(DOMAIN, TAG, '%{public}s', 'Ability onWindowStageCreate');
 
     const ctx = this.context;
+    
+    SessionTransferStore.getInstance().injectContext(ctx);
+    SessionTransferStore.getInstance().initialize().then(() => {
+      hilog.info(DOMAIN, TAG, 'SessionTransferStore initialized successfully');
+    }).catch((err: Error) => {
+      hilog.warn(DOMAIN, TAG, 'Failed to initialize SessionTransferStore: %{public}s', err.message);
+    });
+    
+    ReadPersistenceController.getInstance().injectContext(ctx);
+    ReadPersistenceController.getInstance().initialize().then(() => {
+      hilog.info(DOMAIN, TAG, 'ReadPersistenceController initialized successfully');
+    }).catch((err: Error) => {
+      hilog.warn(DOMAIN, TAG, 'Failed to initialize ReadPersistenceController: %{public}s', err.message);
+    });
+    
+    SeenContextStore.getInstance('seen_context_ids_v2', 2000).injectContext(ctx);
+    SeenContextStore.getInstance('seen_context_ids_v2', 2000).initialize().then(() => {
+      hilog.info(DOMAIN, TAG, 'SeenContextStore initialized successfully');
+    }).catch((err: Error) => {
+      hilog.warn(DOMAIN, TAG, 'Failed to initialize SeenContextStore: %{public}s', err.message);
+    });
     
     WordLevelLoader.getInstance().setResourceManager(ctx.resourceManager);
     WordLevelLoader.getInstance().initialize().then(() => {

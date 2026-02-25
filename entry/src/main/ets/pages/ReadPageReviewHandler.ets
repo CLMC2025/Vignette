@@ -18,6 +18,7 @@ export interface ReviewProcessResult {
 export interface ReviewProcessCallbacks {
   onShowBanner: (type: TopBannerType, message: string, duration: number) => void;
   onMoveToNext: () => void;
+  onPersistSession?: () => Promise<void>;
 }
 
 export class ReadPageReviewHandler {
@@ -135,6 +136,10 @@ export class ReadPageReviewHandler {
     
     callbacks.onShowBanner(TopBannerType.INFO, message, 1000);
     callbacks.onMoveToNext();
+
+    if (callbacks.onPersistSession) {
+      void callbacks.onPersistSession();
+    }
 
     return {
       updatedWord: result.updatedWord,

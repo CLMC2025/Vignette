@@ -3,6 +3,8 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "test": "node ./scripts/run-ohos-tests.js"
+    "test": "node ./scripts/run-ohos-tests.js",
+    "generate": "node ./scripts/generate.js",
+    "lint": "node ./scripts/check-arkts.js"
   }
 }

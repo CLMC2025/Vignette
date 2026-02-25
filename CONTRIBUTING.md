@@ -33,7 +33,7 @@
 3. 编写代码，确保遵循以下规范
 4. 提交更改
    ```bash
-   git commit -m 'Add some AmazingFeature'
+   git commit -m 'feat: 添加 AmazingFeature 功能'
    ```
 5. 推送到分支
    ```bash
@@ -54,7 +54,7 @@
 ### 命名规范
 
 | 类型 | 规范 | 示例 |
-|------|------|------|
+| :--- | :--- | :--- |
 | 类/接口/组件 | PascalCase | `WordItem`, `DBManager` |
 | 变量/函数 | camelCase | `loadData`, `currentBook` |
 | 常量 | UPPER_SNAKE_CASE | `MAX_RETRY_COUNT` |
@@ -70,7 +70,11 @@ entry/src/main/ets/
 ├── utils/          # 工具类
 ├── manager/        # 业务逻辑管理器
 ├── database/       # 数据库相关
-└── context/        # 语境生成相关
+├── context/        # 语境生成相关
+├── sync/           # WebDAV 同步相关
+├── service/        # API、数据库服务
+├── vocabulary/     # 词汇系统
+└── entryability/   # Ability 相关
 ```
 
 ### 提交信息规范
@@ -89,7 +93,7 @@ entry/src/main/ets/
 ## 🔧 开发环境
 
 - [DevEco Studio](https://developer.huawei.com/consumer/cn/deveco-studio/) 最新版
-- HarmonyOS SDK (API 12+)
+- HarmonyOS SDK (API 20+)
 - Node.js 18+
 
 ## 📄 许可证

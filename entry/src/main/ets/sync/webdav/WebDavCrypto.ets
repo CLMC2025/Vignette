@@ -225,6 +225,7 @@ async function pbkdf2Sha256Async(password: Uint8Array, salt: Uint8Array, iterati
   const out = new Uint8Array(dkLen);
   let outPos = 0;
   for (let i = 1; i <= l; i++) {
+    // Yield at the start of each block
     await yieldToEventLoop();
     const u1 = hmacSha256(password, concatBytes(salt, int32be(i)));
     let t = u1;
@@ -232,7 +233,8 @@ async function pbkdf2Sha256Async(password: Uint8Array, salt: Uint8Array, iterati
     for (let j = 2; j <= iterations; j++) {
       u = hmacSha256(password, u);
       t = xorBytes(t, u);
-      if (j % 32 === 0) {
+      // Yield more frequently - every 16 iterations instead of 32
+      if (j % 16 === 0) {
         await yieldToEventLoop();
       }
       // Log progress every 2500 iterations
@@ -437,7 +439,8 @@ async function aes256CtrCryptAsync(data: Uint8Array, key: Uint8Array, iv: Uint8A
   const out = new Uint8Array(data.length);
   const counter = iv.slice(0);
 
-  const chunkSize = 4096;
+  // Reduce chunk size and increase yield frequency to prevent UI jank
+  const chunkSize = 2048; // Reduced from 4096 to 2048
   const chunks = Math.ceil(data.length / chunkSize);
   
   for (let chunk = 0; chunk < chunks; chunk++) {
@@ -454,13 +457,15 @@ async function aes256CtrCryptAsync(data: Uint8Array, key: Uint8Array, iv: Uint8A
       incCounter(counter);
     }
     
-    // Log progress every 8 chunks (32KB) instead of 16 for more frequent updates
-    if (chunk % 8 === 0 && chunks > 8) {
+    // Log progress every 16 chunks (32KB) - less frequent logging to reduce overhead
+    if (chunk % 16 === 0 && chunks > 16) {
       const progress = Math.round((end / data.length) * 100);
       console.info(`[WebDAV] crypto aes progress bytes=${end}/${data.length} (${progress}%)`);
     }
     
-    await new Promise<void>((resolve) => setTimeout(resolve, 5));
+    // Yield more frequently to allow UI thread to render
+    // Use 0ms timeout for immediate yield, or 1ms if in TaskPool
+    await yieldToEventLoop();
   }
   
   return out;
@@ -535,8 +540,16 @@ export class WebDavCrypto {
   }
 
   static async encryptUtf8Offloaded(plainText: string, password: string): Promise<string> {
-    console.info('[WebDAV] crypto encrypt mode=async');
-    return await WebDavCrypto.encryptUtf8Async(plainText, password);
+    console.info('[WebDAV] crypto encrypt mode=async-with-yield');
+    const startMs = Date.now();
+    
+    // Use async version with frequent yields to avoid blocking main thread
+    // TaskPool doesn't support async functions, so we use main thread with yielding
+    const result = await WebDavCrypto.encryptUtf8Async(plainText, password);
+    
+    const elapsedMs = Date.now() - startMs;
+    console.info(`[WebDAV] crypto encrypt async complete ms=${elapsedMs}`);
+    return result;
   }
 
   static decryptUtf8(payloadJson: string, password: string): string {
@@ -625,7 +638,15 @@ export class WebDavCrypto {
   }
 
   static async decryptUtf8Offloaded(payloadJson: string, password: string): Promise<string> {
-    console.info('[WebDAV] crypto decrypt mode=async');
-    return await WebDavCrypto.decryptUtf8Async(payloadJson, password);
+    console.info('[WebDAV] crypto decrypt mode=async-with-yield');
+    const startMs = Date.now();
+    
+    // Use async version with frequent yields to avoid blocking main thread
+    // TaskPool doesn't support async functions, so we use main thread with yielding
+    const result = await WebDavCrypto.decryptUtf8Async(payloadJson, password);
+    
+    const elapsedMs = Date.now() - startMs;
+    console.info(`[WebDAV] crypto decrypt async complete ms=${elapsedMs}`);
+    return result;
   }
 }

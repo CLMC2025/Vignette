@@ -31,6 +31,10 @@ export interface WebDavManifestJSON {
   lastTemplatePackEtag: string;
   lastWordsSyncMs?: number;
   wordsDeltaEtag?: string;
+  lastNotebookSyncMs?: number;
+  notebookEtag?: string;
+  lastTextsSyncMs?: number;
+  textsEtag?: string;
 }
 
 // Review event JSON representation for JSON Lines format
@@ -112,6 +116,10 @@ export class WebDavManifest {
   lastTemplatePackEtag: string;
   lastWordsSyncMs: number;
   wordsDeltaEtag: string;
+  lastNotebookSyncMs: number;
+  notebookEtag: string;
+  lastTextsSyncMs: number;
+  textsEtag: string;
 
   constructor(
     deviceId: string,
@@ -125,7 +133,11 @@ export class WebDavManifest {
     lastTemplatePackDownloadMs: number = 0,
     lastTemplatePackEtag: string = '',
     lastWordsSyncMs: number = 0,
-    wordsDeltaEtag: string = ''
+    wordsDeltaEtag: string = '',
+    lastNotebookSyncMs: number = 0,
+    notebookEtag: string = '',
+    lastTextsSyncMs: number = 0,
+    textsEtag: string = ''
   ) {
     this.deviceId = deviceId;
     this.lastBackupUploadMs = lastBackupUploadMs;
@@ -139,6 +151,10 @@ export class WebDavManifest {
     this.lastTemplatePackEtag = lastTemplatePackEtag;
     this.lastWordsSyncMs = lastWordsSyncMs;
     this.wordsDeltaEtag = wordsDeltaEtag;
+    this.lastNotebookSyncMs = lastNotebookSyncMs;
+    this.notebookEtag = notebookEtag;
+    this.lastTextsSyncMs = lastTextsSyncMs;
+    this.textsEtag = textsEtag;
   }
 
   toJSON(): string {
@@ -154,7 +170,11 @@ export class WebDavManifest {
       lastTemplatePackDownloadMs: this.lastTemplatePackDownloadMs,
       lastTemplatePackEtag: this.lastTemplatePackEtag,
       lastWordsSyncMs: this.lastWordsSyncMs,
-      wordsDeltaEtag: this.wordsDeltaEtag
+      wordsDeltaEtag: this.wordsDeltaEtag,
+      lastNotebookSyncMs: this.lastNotebookSyncMs,
+      notebookEtag: this.notebookEtag,
+      lastTextsSyncMs: this.lastTextsSyncMs,
+      textsEtag: this.textsEtag
     };
     return JSON.stringify(obj);
   }
@@ -174,7 +194,11 @@ export class WebDavManifest {
         obj.lastTemplatePackDownloadMs ?? 0,
         obj.lastTemplatePackEtag ?? '',
         obj.lastWordsSyncMs ?? 0,
-        obj.wordsDeltaEtag ?? ''
+        obj.wordsDeltaEtag ?? '',
+        obj.lastNotebookSyncMs ?? 0,
+        obj.notebookEtag ?? '',
+        obj.lastTextsSyncMs ?? 0,
+        obj.textsEtag ?? ''
       );
     } catch (e) {
       return new WebDavManifest(fallbackDeviceId);
@@ -187,12 +211,16 @@ export class WebDavSyncResult {
   message: string;
   detail: string;
   userError: ErrorInfo | null;
+  needsConfirmation: boolean;
+  confirmationType: string;
 
   constructor(success: boolean, message: string, detail: string = '', userError: ErrorInfo | null = null) {
     this.success = success;
     this.message = message;
     this.detail = detail;
     this.userError = userError;
+    this.needsConfirmation = false;
+    this.confirmationType = '';
   }
 
   static ok(message: string): WebDavSyncResult {
@@ -201,6 +229,13 @@ export class WebDavSyncResult {
 
   static fail(message: string, detail: string): WebDavSyncResult {
     return new WebDavSyncResult(false, message, detail, buildUserFacingError(detail));
+  }
+
+  static needConfirm(message: string, detail: string, confirmationType: string): WebDavSyncResult {
+    const result = new WebDavSyncResult(false, message, detail, buildUserFacingError(detail));
+    result.needsConfirmation = true;
+    result.confirmationType = confirmationType;
+    return result;
   }
 }
 
@@ -253,3 +288,5 @@ export const MODEL_FILE_NAME: string = 'policy.json.enc';
 export const TEMPLATE_PACK_FILE_NAME: string = 'template_pack.json.enc';
 export const WORDS_DELTA_FILE_NAME: string = 'words_delta.json.enc';
 export const DEFINITIONS_FILE_NAME: string = 'definitions.json.enc';
+export const NOTEBOOK_FILE_NAME: string = 'notebook.json.enc';
+export const TEXTS_FILE_NAME: string = 'texts.json.enc';

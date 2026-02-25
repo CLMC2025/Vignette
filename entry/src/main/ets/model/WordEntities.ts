@@ -1,4 +1,3 @@
-
 import { FSRSState, ReviewHistory, Rating } from './FSRSModels';
 
 /**
@@ -208,6 +207,94 @@ export class WordDefinition {
 }
 
 /**
+ * 用户操作状态接口 - 与FSRS算法状态分离，保持用户个性化标记
+ */
+export class UserActions {
+  isNotebook: boolean;              // 是否已收藏
+  userBookIds: string[];            // 加入的用户词书ID列表  
+  customTags: string[];             // 用户自定义标签
+  notes: string;                    // 用户笔记
+  userStatus: string;               // 用户标记状态 (FAMILIAR/DIFFICULT等)
+  addedToBooksAt: Map<string, number>;  // 加入词书的时间戳
+  lastNotebookAt: number;           // 最后收藏时间
+  lastUserStatusAt: number;         // 最后用户状态变更时间
+  lastCustomChangeAt: number;       // 最后自定义设置变更时间
+  
+  constructor(
+    isNotebook: boolean = false,
+    userBookIds: string[] = [],
+    customTags: string[] = [],
+    notes: string = '',
+    userStatus: string = '',
+    addedToBooksAt: Map<string, number> = new Map(),
+    lastNotebookAt: number = 0,
+    lastUserStatusAt: number = 0,
+    lastCustomChangeAt: number = 0
+  ) {
+    this.isNotebook = isNotebook;
+    this.userBookIds = userBookIds;
+    this.customTags = customTags;
+    this.notes = notes;
+    this.userStatus = userStatus;
+    this.addedToBooksAt = addedToBooksAt;
+    this.lastNotebookAt = lastNotebookAt;
+    this.lastUserStatusAt = lastUserStatusAt;
+    this.lastCustomChangeAt = lastCustomChangeAt;
+  }
+
+  // 获取克隆
+  clone(): UserActions {
+    return new UserActions(
+      this.isNotebook,
+      [...this.userBookIds],
+      [...this.customTags],
+      this.notes,
+      this.userStatus,
+      new Map(this.addedToBooksAt),
+      this.lastNotebookAt,
+      this.lastUserStatusAt,
+      this.lastCustomChangeAt
+    );
+  }
+
+  // 添加到词书
+  addToBook(bookId: string): void {
+    if (!this.userBookIds.includes(bookId)) {
+      this.userBookIds.push(bookId);
+      this.addedToBooksAt.set(bookId, Date.now());
+      this.lastCustomChangeAt = Date.now();
+    }
+  }
+
+  // 从词书移除
+  removeFromBook(bookId: string): void {
+    this.userBookIds = this.userBookIds.filter(id => id !== bookId);
+    this.addedToBooksAt.delete(bookId);
+    this.lastCustomChangeAt = Date.now();
+  }
+
+  // 添加收藏
+  favorite(): void {
+    this.isNotebook = true;
+    this.lastNotebookAt = Date.now();
+    this.lastCustomChangeAt = Date.now();
+  }
+
+  // 取消收藏
+  unfavorite(): void {
+    this.isNotebook = false;
+    this.lastCustomChangeAt = Date.now();
+  }
+
+  // 更新用户状态
+  updateUserStatus(status: string): void {
+    this.userStatus = status;
+    this.lastUserStatusAt = Date.now();
+    this.lastCustomChangeAt = Date.now();
+  }
+}
+
+/**
  * Main WordItem class - represents a vocabulary word
  */
 export class WordItem {
@@ -226,6 +313,7 @@ export class WordItem {
   leechLevel: number;             // Leech level (0-3, for stubborn word strategy)
   errorTags: string[];            // Error type tags (for targeted reinforcement)
   suspendUntil: number;            // Suspension timestamp (for leech cooldown)
+  userActions: UserActions;         // User-specific actions (favorites, books, tags)
 
   constructor(
     id: number = 0,
@@ -242,7 +330,8 @@ export class WordItem {
     lapseCount: number = 0,
     leechLevel: number = 0,
     errorTags: string[] = [],
-    suspendUntil: number = 0
+    suspendUntil: number = 0,
+    userActions: UserActions = new UserActions()
   ) {
     this.id = id;
     this.word = word;
@@ -259,6 +348,7 @@ export class WordItem {
     this.leechLevel = leechLevel;
     this.errorTags = errorTags;
     this.suspendUntil = suspendUntil;
+    this.userActions = userActions;
   }
 
   /**
@@ -280,7 +370,8 @@ export class WordItem {
       this.lapseCount,
       this.leechLevel,
       [...this.errorTags],
-      this.suspendUntil
+      this.suspendUntil,
+      this.userActions.clone()
     );
   }
 

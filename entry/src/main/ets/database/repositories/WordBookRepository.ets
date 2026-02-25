@@ -501,14 +501,16 @@ export class WordBookRepository extends BaseRepository {
     }
     const now = Date.now();
     const newStatus = WordStatus.NEW;
+    const knownStatus = WordStatus.KNOWN;
     const sql =
       `SELECT w.* FROM ${TABLE_SYSTEM_WORD_BOOK_WORDS} sw ` +
       `INNER JOIN ${TABLE_WORDS} w ON sw.word = w.word ` +
       `WHERE sw.book_id = ? ` +
       `AND w.status != ? ` +
+      `AND w.status != ? ` +
       `AND w.due_date <= ? ` +
       `ORDER BY w.due_date ASC`;
-    const args: relationalStore.ValueType[] = [normalizedBookId, newStatus, now];
+    const args: relationalStore.ValueType[] = [normalizedBookId, newStatus, knownStatus, now];
     const resultSet = await this.store!.querySql(sql, args);
     const words: WordItem[] = [];
     while (resultSet.goToNextRow()) {
@@ -530,7 +532,7 @@ export class WordBookRepository extends BaseRepository {
       `SELECT w.* FROM ${TABLE_SYSTEM_WORD_BOOK_WORDS} sw ` +
       `INNER JOIN ${TABLE_WORDS} w ON sw.word = w.word ` +
       `WHERE sw.book_id = ? AND w.status = ? ` +
-      `ORDER BY w.created_at ASC ` +
+      `ORDER BY sw.created_at ASC ` +
       `LIMIT ?`;
     const args: relationalStore.ValueType[] = [normalizedBookId, newStatus, safeLimit];
     const resultSet = await this.store!.querySql(sql, args);
@@ -643,17 +645,17 @@ export class WordBookRepository extends BaseRepository {
     const now = Date.now();
     const safeLimit = Math.max(1, limit);
 
-    // Review words
     const reviewSql =
       `SELECT w.* FROM ${TABLE_USER_WORD_BOOK_WORDS} sw ` +
       `INNER JOIN ${TABLE_WORDS} w ON sw.word = w.word ` +
       `WHERE sw.book_id = ? ` +
-      `AND w.status != 'NEW' ` +
+      `AND w.status != ? ` +
+      `AND w.status != ? ` +
       `AND w.due_date <= ? ` +
       `ORDER BY w.due_date ASC ` +
       `LIMIT ?`;
     
-    const reviewArgs: relationalStore.ValueType[] = [bookId, now, safeLimit];
+    const reviewArgs: relationalStore.ValueType[] = [bookId, WordStatus.NEW, WordStatus.KNOWN, now, safeLimit];
     const reviewRs = await this.store!.querySql(reviewSql, reviewArgs);
     const reviews: WordItem[] = [];
     while (reviewRs.goToNextRow()) {
@@ -665,17 +667,16 @@ export class WordBookRepository extends BaseRepository {
       return reviews;
     }
 
-    // New words
     const newLimit = limit - reviews.length;
     const newSql =
       `SELECT w.* FROM ${TABLE_USER_WORD_BOOK_WORDS} sw ` +
       `INNER JOIN ${TABLE_WORDS} w ON sw.word = w.word ` +
       `WHERE sw.book_id = ? ` +
-      `AND w.status = 'NEW' ` +
-      `ORDER BY w.created_at ASC ` +
+      `AND w.status = ? ` +
+      `ORDER BY sw.created_at ASC ` +
       `LIMIT ?`;
     
-    const newArgs: relationalStore.ValueType[] = [bookId, newLimit];
+    const newArgs: relationalStore.ValueType[] = [bookId, WordStatus.NEW, newLimit];
     const newRs = await this.store!.querySql(newSql, newArgs);
     const newWords: WordItem[] = [];
     while (newRs.goToNextRow()) {

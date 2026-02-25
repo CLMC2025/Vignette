@@ -95,7 +95,41 @@ export interface DecryptTaskResult {
   detail: string;
 }
 
+// 加密任务参数
+export interface EncryptTaskParams {
+  plainData: string;
+  syncPassword: string;
+}
+
+// 加密任务结果
+export interface EncryptTaskResult {
+  success: boolean;
+  data: string; // 加密后的数据
+  detail: string;
+}
+
 // ==================== TaskPool 任务函数 ====================
+
+/**
+ * 执行加密任务（在 TaskPool 中运行）
+ * 只执行加密，不上传
+ */
+@Concurrent
+export async function executeEncrypt(params: EncryptTaskParams): Promise<EncryptTaskResult> {
+  console.info(`[WebDavSyncTask] Starting encryption in taskpool data_size=${params.plainData.length} chars`);
+  const startMs = Date.now();
+
+  try {
+    const encrypted = await WebDavCrypto.encryptUtf8Offloaded(params.plainData, params.syncPassword);
+    const encryptMs = Date.now() - startMs;
+    console.info(`[WebDavSyncTask] Encryption complete encrypted_size=${encrypted.length} chars ms=${encryptMs}`);
+    return { success: true, data: encrypted, detail: '' };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(`[WebDavSyncTask] Encryption failed: ${msg}`);
+    return { success: false, data: '', detail: msg };
+  }
+}
 
 /**
  * 执行备份上传任务（在 TaskPool 中运行）
@@ -151,10 +185,10 @@ export async function executeBackupWithEncrypt(params: BackupTaskWithEncryptPara
   const startMs = Date.now();
 
   try {
-    // 在 TaskPool 中加密数据
+    // 在 TaskPool 中加密数据（使用 Offloaded 版本，避免阻塞）
     console.info('[WebDavSyncTask] Encrypting data in background');
     const encryptStartMs = Date.now();
-    const encrypted = await WebDavCrypto.encryptUtf8Async(params.plainData, params.syncPassword);
+    const encrypted = await WebDavCrypto.encryptUtf8Offloaded(params.plainData, params.syncPassword);
     const encryptMs = Date.now() - encryptStartMs;
     console.info(`[WebDavSyncTask] Encryption complete encrypted_size=${encrypted.length} chars ms=${encryptMs}`);
 
@@ -312,10 +346,10 @@ export async function executeUploadWithEncrypt(params: UploadTaskWithEncryptPara
   const startMs = Date.now();
 
   try {
-    // 在 TaskPool 中加密数据
+    // 在 TaskPool 中加密数据（使用 Offloaded 版本，避免阻塞）
     console.info('[WebDavSyncTask] Encrypting data in background');
     const encryptStartMs = Date.now();
-    const encrypted = await WebDavCrypto.encryptUtf8Async(params.plainData, params.syncPassword);
+    const encrypted = await WebDavCrypto.encryptUtf8Offloaded(params.plainData, params.syncPassword);
     const encryptMs = Date.now() - encryptStartMs;
     console.info(`[WebDavSyncTask] Encryption complete encrypted_size=${encrypted.length} chars ms=${encryptMs}`);
 
@@ -510,7 +544,8 @@ export async function executeUploadWithEncryptMainThread(params: UploadTaskWithE
   const startMs = Date.now();
 
   try {
-    const encrypted = await WebDavCrypto.encryptUtf8Async(params.plainData, params.syncPassword);
+    // 使用 Offloaded 版本，即使主线程也会通过 yield 避免阻塞
+    const encrypted = await WebDavCrypto.encryptUtf8Offloaded(params.plainData, params.syncPassword);
     const client = new WebDavClient(params.endpoint, params.username, params.password);
     const putRes = await client.put(params.remoteFile, encrypted, 'application/json');
     
@@ -537,7 +572,8 @@ export async function executeBackupWithEncryptMainThread(params: BackupTaskWithE
   const startMs = Date.now();
 
   try {
-    const encrypted = await WebDavCrypto.encryptUtf8Async(params.plainData, params.syncPassword);
+    // 使用 Offloaded 版本，即使主线程也会通过 yield 避免阻塞
+    const encrypted = await WebDavCrypto.encryptUtf8Offloaded(params.plainData, params.syncPassword);
     const client = new WebDavClient(params.endpoint, params.username, params.password);
     const putRes = await client.put(params.backupFilePath, encrypted, 'application/json');
     

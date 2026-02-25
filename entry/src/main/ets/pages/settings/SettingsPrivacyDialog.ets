@@ -62,7 +62,7 @@ export struct SettingsPrivacyDialog {
       '我们可能会不时更新本隐私政策，更新后的政策将在本页面公布，重大变更会另行通知。',
       '联系我们',
       '项目地址：https://github.com/CLMC2025/Vignette',
-      '邮箱：c_k1@foxmail.com',
+      '邮箱：5@941985.xyz',
       'QQ反馈群：1077476965',
       '同意声明',
       '使用本应用即表示您同意本隐私政策的所有条款。如果您不同意，请停止使用本应用。'

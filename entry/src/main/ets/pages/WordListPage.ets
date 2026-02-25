@@ -37,6 +37,26 @@ interface RouterParams {
 
 type SortType = 'default' | 'alphabet' | 'status' | 'time';
 
+class SimpleWordDataSource implements IDataSource {
+  private words: SimpleWord[] = [];
+
+  constructor(words: SimpleWord[]) {
+    this.words = words;
+  }
+
+  totalCount(): number {
+    return this.words.length;
+  }
+
+  getData(index: number): SimpleWord {
+    return this.words[index];
+  }
+
+  registerDataChangeListener(listener: DataChangeListener): void {}
+
+  unregisterDataChangeListener(listener: DataChangeListener): void {}
+}
+
 @Entry
 @Component
 struct WordListPage {
@@ -49,6 +69,7 @@ struct WordListPage {
   @State private words: WordItem[] = [];
   @State private simpleWords: SimpleWord[] = [];
   @State private displayWords: SimpleWord[] = [];
+  @State private dataSource: SimpleWordDataSource = new SimpleWordDataSource([]);
   @State private currentPage: number = 0;
   @State private pageSize: number = 100;
   @State private hasMore: boolean = false;
@@ -78,6 +99,51 @@ struct WordListPage {
     this.context = getContext(this) as common.UIAbilityContext;
     console.info(`[WordListPage] context = ${this.context ? 'ok' : 'null'}`);
     void this.initialize();
+  }
+
+  onPageShow(): void {
+    // 页面显示时刷新数据，确保单词状态同步
+    // 使用延迟执行，避免影响页面进入动画
+    setTimeout(() => {
+      void this.refreshData();
+    }, 300);
+  }
+
+  private async refreshData(): Promise<void> {
+    // 只刷新用户词书的数据，系统词书在 loadWords 中处理
+    if (this.bookType === 'user' && this.words.length > 0) {
+      try {
+        // 只检查当前显示的单词（前100个），避免大量查询
+        const visibleWords = this.displayWords.slice(0, 100);
+        let hasChanges = false;
+
+        for (const simpleWord of visibleWords) {
+          const word = this.words.find(w => w.word === simpleWord.word);
+          if (word !== undefined) {
+            const dbWord = await this.dbManager.getWordById(word.id);
+            if (dbWord !== null && dbWord.status !== word.status) {
+              hasChanges = true;
+              // 更新 words 数组
+              const index = this.words.findIndex(w => w.id === word.id);
+              if (index >= 0) {
+                this.words[index] = dbWord;
+              }
+              // 更新 simpleWords
+              const simpleIndex = this.simpleWords.findIndex(sw => sw.word === word.word);
+              if (simpleIndex >= 0) {
+                this.simpleWords[simpleIndex] = { word: dbWord.word, status: dbWord.status };
+              }
+            }
+          }
+        }
+
+        if (hasChanges) {
+          this.updateDisplayWords();
+        }
+      } catch (e) {
+        console.warn('[WordListPage] refreshData failed:', e);
+      }
+    }
   }
 
   private async initialize(): Promise<void> {
@@ -169,6 +235,7 @@ struct WordListPage {
     const start = 0;
     const end = Math.min(this.pageSize, filtered.length);
     this.displayWords = filtered.slice(start, end);
+    this.dataSource = new SimpleWordDataSource(this.displayWords);
     this.hasMore = filtered.length > this.pageSize;
     this.currentPage = 0;
   }
@@ -181,10 +248,11 @@ struct WordListPage {
     const nextPage = this.currentPage + 1;
     const start = nextPage * this.pageSize;
     const end = Math.min(start + this.pageSize, filtered.length);
-    
+
     if (start < filtered.length) {
       const moreWords = filtered.slice(start, end);
       this.displayWords = [...this.displayWords, ...moreWords];
+      this.dataSource = new SimpleWordDataSource(this.displayWords);
       this.currentPage = nextPage;
       this.hasMore = end < filtered.length;
     }
@@ -449,7 +517,7 @@ struct WordListPage {
         const priority = word.status === WordStatus.NEW ? 1 : 0;
         return new QueueItem(word, priority);
       });
-      const sessionId = SessionTransferStore.getInstance().put(queue);
+      const sessionId = await SessionTransferStore.getInstance().put(queue);
       const params: RouterParams = { sessionId: sessionId };
       router.pushUrl({ url: 'pages/ReadPage', params: params });
     } catch (e) {
@@ -615,12 +683,12 @@ struct WordListPage {
                 .alignItems(HorizontalAlign.Center);
               } else {
                 List() {
-                  ForEach(this.displayWords, (word: SimpleWord) => {
+                  LazyForEach(this.dataSource, (word: SimpleWord) => {
                     ListItem() {
                       this.buildWordRow(word);
                     }
                   }, (word: SimpleWord) => word.word);
-                  
+
                   if (this.hasMore) {
                     ListItem() {
                       Row() {
@@ -635,6 +703,7 @@ struct WordListPage {
                     }
                   }
                 }
+                .cachedCount(10)
               }
             }
             .width('100%')
@@ -706,8 +775,8 @@ struct WordListPage {
 
   private goToWordDetail(word: string): void {
     router.pushUrl({
-      url: 'pages/WordDetail',
-      params: { word: word }
+      url: 'pages/WordDetailPage',
+      params: { wordId: 0, wordText: word }
     }).catch((err: Error) => {
       console.error('[WordListPage] Navigation failed:', err.message);
     });

@@ -7,6 +7,26 @@ import { WordItem, WordMeaning, WordStatus } from '../model/WordModel';
 import { ColorsInterface } from '../model/TokenInterfaces';
 import { ThemeManager } from '../manager/ThemeManager';
 
+class NotebookWordDataSource implements IDataSource {
+  private words: NotebookWordEntry[] = [];
+
+  constructor(words: NotebookWordEntry[]) {
+    this.words = words;
+  }
+
+  totalCount(): number {
+    return this.words.length;
+  }
+
+  getData(index: number): NotebookWordEntry {
+    return this.words[index];
+  }
+
+  registerDataChangeListener(listener: DataChangeListener): void {}
+
+  unregisterDataChangeListener(listener: DataChangeListener): void {}
+}
+
 @Entry
 @Component
 struct NotebookPage {
@@ -15,6 +35,7 @@ struct NotebookPage {
   @State private wordItems: Map<string, WordItem> = new Map<string, WordItem>();
   @State private searchText: string = '';
   @State private filteredWords: NotebookWordEntry[] = [];
+  @State private dataSource: NotebookWordDataSource = new NotebookWordDataSource([]);
   @StorageProp('ThemeRefreshToken') @Watch('onThemeChange') themeRefreshToken: number = 0;
   @State private colors: ColorsInterface = ThemeManager.getInstance().getColors();
 
@@ -28,6 +49,41 @@ struct NotebookPage {
   aboutToAppear(): void {
     this.context = getContext(this) as common.UIAbilityContext;
     void this.initialize();
+  }
+
+  onPageShow(): void {
+    // 页面显示时刷新数据，确保单词状态同步
+    // 使用延迟执行，避免影响页面进入动画
+    setTimeout(() => {
+      void this.refreshWordItems();
+    }, 300);
+  }
+
+  private async refreshWordItems(): Promise<void> {
+    if (this.notebookWords.length === 0) {
+      return;
+    }
+    try {
+      // 只检查前50个单词，避免大量查询
+      const visibleWords = this.filteredWords.slice(0, 50);
+      let hasChanges = false;
+
+      for (const nw of visibleWords) {
+        const item = await this.dbManager.getWordByWord(nw.word);
+        if (item !== null) {
+          const existing = this.wordItems.get(nw.word);
+          if (existing === undefined || existing.status !== item.status || existing.id !== item.id) {
+            this.wordItems.set(nw.word, item);
+            hasChanges = true;
+          }
+        }
+      }
+      if (hasChanges) {
+        this.applyFilter();
+      }
+    } catch (e) {
+      console.warn('[NotebookPage] refreshWordItems failed:', e);
+    }
   }
 
   private async initialize(): Promise<void> {
@@ -78,6 +134,7 @@ struct NotebookPage {
         return false;
       });
     }
+    this.dataSource = new NotebookWordDataSource(this.filteredWords);
   }
 
   private getWordMeaningText(word: WordItem): string {
@@ -208,17 +265,18 @@ struct NotebookPage {
           .width('100%')
           .justifyContent(FlexAlign.Center);
         } else {
-          Scroll() {
-            Column() {
-              ForEach(this.filteredWords, (nw: NotebookWordEntry) => {
+          List({ space: 12 }) {
+            LazyForEach(this.dataSource, (nw: NotebookWordEntry) => {
+              ListItem() {
                 this.buildWordCard(nw);
-              }, (nw: NotebookWordEntry) => nw.word);
-            }
-            .width('100%')
-            .padding({ left: 16, right: 16, bottom: 24 });
+              }
+            }, (nw: NotebookWordEntry) => nw.word);
           }
+          .width('100%')
           .layoutWeight(1)
-          .scrollBar(BarState.Off);
+          .cachedCount(8)
+          .scrollBar(BarState.Off)
+          .padding({ left: 16, right: 16, bottom: 24 });
         }
       }
     }
@@ -271,7 +329,6 @@ struct NotebookPage {
     .padding(16)
     .backgroundColor(this.colors.SURFACE_PRIMARY)
     .borderRadius(DesignTokens.BorderRadius.XL)
-    .margin({ bottom: 12 })
     .onClick(() => {
       void this.navigateToWordDetail(nw);
     });

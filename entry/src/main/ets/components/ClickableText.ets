@@ -50,19 +50,38 @@ export struct ClickableText {
   @Prop lineHeight: number = 22;
   onWordClick: (word: string) => void = () => {};
 
+  private readonly MAX_WORDS = 500;
+
+  // Cache for parsed segments to avoid re-parsing on every render
+  @State private cachedSegments: TextSegment[] = [];
+  private lastParsedText: string = '';
+
+  aboutToAppear(): void {
+    this.updateParsedSegments();
+  }
+
+  aboutToUpdate(): void {
+    this.updateParsedSegments();
+  }
+
+  private updateParsedSegments(): void {
+    if (this.text !== this.lastParsedText) {
+      this.cachedSegments = this.parseText(this.text);
+      this.lastParsedText = this.text;
+    }
+  }
+
   /**
    * 解析文本为片段
    */
-  private parseText(text: string): TextSegment[] {
+  private doParseText(text: string): TextSegment[] {
     const segments: TextSegment[] = [];
     let currentIndex = 0;
 
     while (currentIndex < text.length) {
       const char = text[currentIndex];
 
-      // 检查是否是英文字母
       if (/[a-zA-Z]/.test(char)) {
-        // 提取完整单词
         let word = '';
         let startIndex = currentIndex;
         while (currentIndex < text.length && /[a-zA-Z]/.test(text[currentIndex])) {
@@ -75,7 +94,6 @@ export struct ClickableText {
           index: startIndex
         });
       }
-      // 检查是否是空白字符
       else if (/\s/.test(char)) {
         let whitespace = '';
         let startIndex = currentIndex;
@@ -89,7 +107,6 @@ export struct ClickableText {
           index: startIndex
         });
       }
-      // 其他字符（标点符号等）
       else {
         segments.push({
           type: TextSegmentType.PUNCTUATION,
@@ -103,9 +120,29 @@ export struct ClickableText {
     return segments;
   }
 
+  private parseText(text: string): TextSegment[] {
+    const segments = this.doParseText(text);
+    let wordCount = 0;
+    for (const s of segments) {
+      if (s.type === TextSegmentType.WORD) {
+        wordCount++;
+      }
+    }
+    if (wordCount > this.MAX_WORDS) {
+      let count = 0;
+      return segments.filter(s => {
+        if (s.type === TextSegmentType.WORD) {
+          count++;
+        }
+        return count <= this.MAX_WORDS;
+      });
+    }
+    return segments;
+  }
+
   build() {
     Flex({ wrap: FlexWrap.Wrap }) {
-      ForEach(this.parseText(this.text), (segment: TextSegment, index: number) => {
+      ForEach(this.cachedSegments, (segment: TextSegment, index: number) => {
         if (segment.type === TextSegmentType.WORD) {
           Text(segment.text)
             .fontSize(this.fontSize)
